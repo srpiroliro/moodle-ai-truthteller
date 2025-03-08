@@ -52,89 +52,121 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Handle PDF file upload
   async function handlePdfUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
     
-    if (file.type !== 'application/pdf') {
-      uploadInfo.textContent = 'Error: Only PDF files are supported.';
-      uploadInfo.className = 'upload-info upload-error';
-      return;
-    }
-    
-    // Check if PDF.js is available
-    if (!window.pdfjsLib) {
-      uploadInfo.textContent = 'Error: PDF processing library not available. Please refresh the extension and try again.';
-      uploadInfo.className = 'upload-info upload-error';
-      console.error('TruthTeller: PDF.js library not available during upload attempt');
-      return;
-    }
-    
-    // Check if PDF with same name already exists
-    const existingPdf = uploadedPdfs.find(pdf => pdf.name === file.name);
-    if (existingPdf) {
-      uploadInfo.textContent = `A PDF named "${file.name}" is already in your context.`;
-      uploadInfo.className = 'upload-info upload-error';
-      return;
-    }
-    
-    uploadInfo.textContent = 'Reading PDF file...';
+    // Track upload statistics
+    let uploadStats = {
+      successful: 0,
+      failed: 0,
+      duplicate: 0,
+      totalFiles: files.length
+    };
+
+    uploadInfo.textContent = `Processing ${files.length} file(s)...`;
     uploadInfo.className = 'upload-info';
     
-    try {
-      const pdfText = await extractTextFromPdf(file);
+    // Process each file in sequence
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       
-      if (pdfText.trim() === '') {
-        uploadInfo.textContent = 'Warning: No text could be extracted from the PDF. It may be an image-based PDF or secured.';
+      // Update progress during multiple file upload
+      if (files.length > 1) {
+        uploadInfo.textContent = `Processing file ${i+1}/${files.length}...`;
+      }
+      
+      if (file.type !== 'application/pdf') {
+        uploadInfo.textContent = `Error: Only PDF files are supported. "${file.name}" is not a PDF.`;
         uploadInfo.className = 'upload-info upload-error';
-        return;
+        uploadStats.failed++;
+        continue;
       }
       
-      // Add to uploaded PDFs list
-      const newPdf = {
-        name: file.name,
-        text: pdfText,
-        size: file.size,
-        uploadTime: new Date().toISOString()
-      };
-      
-      uploadedPdfs.push(newPdf);
-      
-      // Update the PDF list display
-      renderPdfList();
-      
-      // Update the context with all PDF content
-      updateCombinedContext();
-      
-      // Auto-enable the context
-      useContextToggle.checked = true;
-      useCustomContext = true;
-      updateContextIndicator();
-      
-      uploadInfo.textContent = `PDF "${file.name}" added (${Math.round(pdfText.length / 1024)} KB of text extracted)`;
-      uploadInfo.className = 'upload-info upload-success';
-      
-      // Clear the file input for next upload
-      pdfFileUpload.value = '';
-      
-    } catch (error) {
-      console.error('PDF extraction error:', error);
-      
-      // Provide a more user-friendly error message
-      let errorMessage = 'Error processing PDF. ';
-      
-      if (error.message.includes('PDF.js library not loaded')) {
-        errorMessage += 'PDF processing library is not available. Please refresh the extension and try again.';
-      } else if (error.message.includes('password')) {
-        errorMessage += 'The PDF appears to be password-protected. Please remove the password protection and try again.';
-      } else if (error.message.includes('corrupt')) {
-        errorMessage += 'The PDF file appears to be corrupted.';
-      } else {
-        errorMessage += error.message;
+      // Check file size limits - warn for large files over 5MB
+      if (file.size > 5 * 1024 * 1024) {
+        console.warn(`TruthTeller: PDF "${file.name}" is very large (${formatFileSize(file.size)}), may cause storage issues`);
+        uploadInfo.textContent = `Warning: "${file.name}" is very large (${formatFileSize(file.size)}). Extracting text...`;
+        uploadInfo.className = 'upload-info';
       }
       
-      uploadInfo.textContent = errorMessage;
-      uploadInfo.className = 'upload-info upload-error';
+      // Check if PDF.js is available
+      if (!window.pdfjsLib) {
+        uploadInfo.textContent = 'Error: PDF processing library not available. Please refresh the extension and try again.';
+        uploadInfo.className = 'upload-info upload-error';
+        console.error('TruthTeller: PDF.js library not available during upload attempt');
+        uploadStats.failed += (files.length - i);
+        break; // No need to continue if the library isn't available
+      }
+      
+      // Check if PDF with same name already exists
+      const existingPdf = uploadedPdfs.find(pdf => pdf.name === file.name);
+      if (existingPdf) {
+        console.log(`TruthTeller: A PDF named "${file.name}" is already in context.`);
+        uploadStats.duplicate++;
+        continue;
+      }
+      
+      try {
+        const pdfText = await extractTextFromPdf(file);
+        
+        if (pdfText.trim() === '') {
+          console.log(`TruthTeller: No text could be extracted from "${file.name}". It may be an image-based PDF or secured.`);
+          uploadStats.failed++;
+          continue;
+        }
+        
+        // Add to uploaded PDFs list
+        const newPdf = {
+          name: file.name,
+          text: pdfText,
+          size: file.size,
+          uploadTime: new Date().toISOString()
+        };
+        
+        uploadedPdfs.push(newPdf);
+        uploadStats.successful++;
+        
+      } catch (error) {
+        console.error(`TruthTeller: PDF extraction error for "${file.name}":`, error);
+        uploadStats.failed++;
+      }
     }
+    
+    // Update the PDF list display
+    renderPdfList();
+    
+    // Update the context with all PDF content
+    updateCombinedContext();
+    
+    // Auto-enable the context
+    useContextToggle.checked = true;
+    useCustomContext = true;
+    updateContextIndicator();
+    
+    // Show final status message
+    if (files.length === 1) {
+      if (uploadStats.successful === 1) {
+        uploadInfo.textContent = `PDF "${files[0].name}" added successfully.`;
+        uploadInfo.className = 'upload-info upload-success';
+      } else if (uploadStats.duplicate === 1) {
+        uploadInfo.textContent = `A PDF named "${files[0].name}" is already in your context.`;
+        uploadInfo.className = 'upload-info upload-error';
+      } else {
+        uploadInfo.textContent = `Error processing PDF "${files[0].name}". It may be corrupted or secured.`;
+        uploadInfo.className = 'upload-info upload-error';
+      }
+    } else {
+      // Multiple files status summary
+      uploadInfo.textContent = `Processed ${files.length} files: ${uploadStats.successful} added successfully, ${uploadStats.duplicate} duplicates, ${uploadStats.failed} failed.`;
+      if (uploadStats.successful > 0) {
+        uploadInfo.className = 'upload-info upload-success';
+      } else {
+        uploadInfo.className = 'upload-info upload-error';
+      }
+    }
+    
+    // Clear the file input for next upload
+    pdfFileUpload.value = '';
   }
 
   // Extract text from PDF
@@ -298,6 +330,55 @@ document.addEventListener('DOMContentLoaded', function() {
     if (uploadedPdfs.length > 0) {
       contextInput.value = combinedText;
     }
+    
+    // Check context size and show warning if needed
+    checkContextSize();
+  }
+  
+  // Check the size of the context and display warnings if needed
+  function checkContextSize() {
+    if (!customContext || customContext.length === 0) return;
+    
+    const characterCount = customContext.length;
+    const wordCount = customContext.trim().split(/\s+/).length;
+    const estimatedSizeKB = Math.round(JSON.stringify({
+      customContext: customContext,
+      uploadedPdfs: uploadedPdfs
+    }).length / 1024);
+    
+    const MAX_SAFE_SIZE_KB = 4000; // 4MB, leaving buffer below Chrome's 5MB limit
+    const WARNING_SIZE_KB = 3000;  // 3MB, start warning at this size
+    
+    // Update the context size indicator in the UI
+    const contextSizeIndicator = document.createElement('div');
+    contextSizeIndicator.className = 'context-size-indicator';
+    contextSizeIndicator.textContent = `Context size: ${estimatedSizeKB}KB (${wordCount.toLocaleString()} words, ${characterCount.toLocaleString()} chars)`;
+    
+    // Remove any existing size indicator
+    const existingIndicator = document.querySelector('.context-size-indicator');
+    if (existingIndicator) {
+      existingIndicator.remove();
+    }
+    
+    // Add the new indicator after the context input
+    contextInput.parentNode.insertBefore(contextSizeIndicator, contextInput.nextSibling);
+    
+    // Style based on size
+    if (estimatedSizeKB > MAX_SAFE_SIZE_KB) {
+      contextSizeIndicator.classList.add('size-danger');
+      uploadInfo.textContent = `Warning: Context size (${estimatedSizeKB}KB / ${wordCount.toLocaleString()} words) exceeds safe limit. Remove some PDFs before saving.`;
+      uploadInfo.className = 'upload-info upload-error';
+    } else if (estimatedSizeKB > WARNING_SIZE_KB) {
+      contextSizeIndicator.classList.add('size-warning');
+      uploadInfo.textContent = `Note: Context size (${estimatedSizeKB}KB / ${wordCount.toLocaleString()} words) is getting large. Consider removing unused PDFs.`;
+      uploadInfo.className = 'upload-info';
+    }
+    
+    return {
+      sizeKB: estimatedSizeKB,
+      wordCount: wordCount,
+      characterCount: characterCount
+    };
   }
 
   // Populate models dropdowns
@@ -396,39 +477,35 @@ document.addEventListener('DOMContentLoaded', function() {
     clearContextButton.addEventListener('click', clearContext);
   }
   
-  // Clear all context data
+  // Clear custom context
   function clearContext() {
-    // Clear the state variables
-    uploadedPdfs = [];
-    customContext = '';
-    useCustomContext = false;
-    
-    // Clear the UI
+    // Clear the context input
     contextInput.value = '';
-    useContextToggle.checked = false;
+    customContext = '';
+    
+    // Clear uploaded PDFs
+    uploadedPdfs = [];
     renderPdfList();
     
-    // Update the UI feedback
-    uploadInfo.textContent = 'All context data cleared';
-    uploadInfo.className = 'upload-info';
-    
-    // Save the cleared state to storage
-    chrome.storage.sync.set({
-      customContext: '',
-      uploadedPdfs: [],
-      useCustomContext: false
-    }, function() {
-      console.log('TruthTeller: Context cleared and saved to storage');
-    });
+    // Disable context toggle
+    useContextToggle.checked = false;
+    useCustomContext = false;
     
     // Update the context indicator
     updateContextIndicator();
     
-    // Close the context panel
-    contextPanel.classList.remove('visible');
+    // Remove any size indicator
+    const existingIndicator = document.querySelector('.context-size-indicator');
+    if (existingIndicator) {
+      existingIndicator.remove();
+    }
     
-    // Show confirmation message
-    addMessageToChat('bot', 'Context cleared. All uploaded PDFs and custom text have been removed.');
+    // Clear any upload info messages
+    uploadInfo.textContent = '';
+    uploadInfo.className = 'upload-info';
+    
+    // Save the cleared state
+    saveContext();
   }
 
   // Update textarea when context input changes
@@ -496,101 +573,160 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Load saved settings from Chrome storage
   function loadSettings() {
+    // Load API keys and model preferences from sync storage (smaller data)
     chrome.storage.sync.get(
-      ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel', 'defaultModel', 'customContext', 'useCustomContext', 'uploadedPdfs'], 
-      function(result) {
-        if (result.openaiApiKey) openaiApiKeyInput.value = result.openaiApiKey;
-        if (result.claudeApiKey) claudeApiKeyInput.value = result.claudeApiKey;
-        if (result.grokApiKey) grokApiKeyInput.value = result.grokApiKey;
-        
-        // Load uploaded PDFs if available
-        if (result.uploadedPdfs && Array.isArray(result.uploadedPdfs)) {
-          uploadedPdfs = result.uploadedPdfs;
-          renderPdfList();
-        }
-        
-        // Load custom context settings
-        if (result.customContext) {
-          customContext = result.customContext;
-          contextInput.value = customContext;
-        }
-        
-        if (result.useCustomContext !== undefined) {
-          useCustomContext = result.useCustomContext;
-          useContextToggle.checked = useCustomContext;
-          updateContextIndicator();
-        }
+      ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel', 'defaultModel'], 
+      function(syncResult) {
+        if (syncResult.openaiApiKey) openaiApiKeyInput.value = syncResult.openaiApiKey;
+        if (syncResult.claudeApiKey) claudeApiKeyInput.value = syncResult.claudeApiKey;
+        if (syncResult.grokApiKey) grokApiKeyInput.value = syncResult.grokApiKey;
         
         // Set the selected model from storage
-        if (result.selectedModel) {
-          modelSelect.value = result.selectedModel;
+        if (syncResult.selectedModel) {
+          modelSelect.value = syncResult.selectedModel;
         }
         
         // Set the default model from storage or use the one from models.js
-        if (result.defaultModel) {
-          defaultModelSelect.value = result.defaultModel;
+        if (syncResult.defaultModel) {
+          defaultModelSelect.value = syncResult.defaultModel;
         } else {
           // Use the default model from models.js
           defaultModelSelect.value = getDefaultModelId();
         }
         
-        console.log('TruthTeller: Settings loaded', {
-          openaiKey: result.openaiApiKey ? 'Set' : 'Not set',
-          claudeKey: result.claudeApiKey ? 'Set' : 'Not set',
-          grokKey: result.grokApiKey ? 'Set' : 'Not set',
-          selectedModel: modelSelect.value || 'Not set',
-          defaultModel: defaultModelSelect.value || 'Not set',
-          customContext: customContext ? `Set (${customContext.length} chars)` : 'Not set',
-          uploadedPdfs: uploadedPdfs.length > 0 ? `${uploadedPdfs.length} PDFs` : 'None',
-          useCustomContext: useCustomContext
-        });
+        // Load larger context data from local storage
+        chrome.storage.local.get(
+          ['customContext', 'useCustomContext', 'uploadedPdfs'],
+          function(localResult) {
+            // Handle case where data might still be in sync storage from previous versions
+            if (!localResult.customContext && !localResult.uploadedPdfs) {
+              chrome.storage.sync.get(
+                ['customContext', 'useCustomContext', 'uploadedPdfs'],
+                function(legacyResult) {
+                  loadContextData(legacyResult);
+                  
+                  // If we found data in sync storage, migrate it to local storage
+                  if (legacyResult.customContext || (legacyResult.uploadedPdfs && legacyResult.uploadedPdfs.length > 0)) {
+                    console.log('TruthTeller: Migrating context data from sync to local storage');
+                    chrome.storage.local.set({
+                      customContext: legacyResult.customContext || '',
+                      useCustomContext: legacyResult.useCustomContext || false,
+                      uploadedPdfs: legacyResult.uploadedPdfs || []
+                    });
+                    
+                    // Clear from sync storage after migration to avoid redundancy
+                    chrome.storage.sync.remove(['customContext', 'useCustomContext', 'uploadedPdfs']);
+                  }
+                }
+              );
+            } else {
+              // Data is already in local storage
+              loadContextData(localResult);
+            }
+          }
+        );
       }
     );
+  }
+  
+  // Helper function to load context data from storage result
+  function loadContextData(result) {
+    // Load uploaded PDFs if available
+    if (result.uploadedPdfs && Array.isArray(result.uploadedPdfs)) {
+      uploadedPdfs = result.uploadedPdfs;
+      renderPdfList();
+    }
+    
+    // Load custom context settings
+    if (result.customContext) {
+      customContext = result.customContext;
+      contextInput.value = customContext;
+    }
+    
+    if (result.useCustomContext !== undefined) {
+      useCustomContext = result.useCustomContext;
+      useContextToggle.checked = useCustomContext;
+      updateContextIndicator();
+    }
   }
 
   // Save settings to Chrome storage
   function saveSettings() {
     const settings = {
-      openaiApiKey: openaiApiKeyInput.value,
-      claudeApiKey: claudeApiKeyInput.value,
-      grokApiKey: grokApiKeyInput.value,
+      openaiApiKey: openaiApiKeyInput.value.trim(),
+      claudeApiKey: claudeApiKeyInput.value.trim(),
+      grokApiKey: grokApiKeyInput.value.trim(),
       selectedModel: modelSelect.value,
       defaultModel: defaultModelSelect.value
     };
     
-    // Save selected model in storage
     chrome.storage.sync.set(settings, function() {
+      if (chrome.runtime.lastError) {
+        console.error('TruthTeller: Error saving settings:', chrome.runtime.lastError);
+        return;
+      }
+      
       console.log('TruthTeller: Settings saved', {
         openaiKey: settings.openaiApiKey ? 'Set' : 'Not set',
         claudeKey: settings.claudeApiKey ? 'Set' : 'Not set',
         grokKey: settings.grokApiKey ? 'Set' : 'Not set',
-        selectedModel: settings.selectedModel,
-        defaultModel: settings.defaultModel
+        selectedModel: settings.selectedModel || 'Not set',
+        defaultModel: settings.defaultModel || 'Not set'
       });
+      
+      // Close the settings panel
+      settingsPanel.classList.remove('visible');
     });
-    
-    // Update the default model in models.js
-    if (settings.defaultModel) {
-      setDefaultModelId(settings.defaultModel);
-    }
   }
 
   // Save custom context to Chrome storage
   function saveContext() {
+    // Calculate estimated size of context data
+    const characterCount = customContext.length;
+    const wordCount = customContext.trim().split(/\s+/).length;
+    const contextJSON = JSON.stringify({
+      customContext: customContext,
+      useCustomContext: useCustomContext,
+      uploadedPdfs: uploadedPdfs
+    });
+    
+    const estimatedSizeKB = Math.round(contextJSON.length / 1024);
+    const MAX_SAFE_SIZE_KB = 4000; // 4MB, leaving buffer below Chrome's 5MB limit
+    
+    if (estimatedSizeKB > MAX_SAFE_SIZE_KB) {
+      uploadInfo.textContent = `Warning: Context size (${estimatedSizeKB}KB / ${wordCount.toLocaleString()} words) exceeds safe limit (${MAX_SAFE_SIZE_KB}KB). Some PDFs may need to be removed.`;
+      uploadInfo.className = 'upload-info upload-error';
+      
+      // Still attempt to save, but user has been warned
+      console.warn(`TruthTeller: Context size (${estimatedSizeKB}KB / ${wordCount.toLocaleString()} words / ${characterCount.toLocaleString()} chars) is very large and may exceed Chrome storage limits`);
+    }
+    
     const contextSettings = {
       customContext: customContext,
       useCustomContext: useCustomContext,
       uploadedPdfs: uploadedPdfs
     };
     
-    chrome.storage.sync.set(contextSettings, function() {
+    // Use storage.local instead of storage.sync for much higher storage limits
+    chrome.storage.local.set(contextSettings, function() {
+      if (chrome.runtime.lastError) {
+        console.error('TruthTeller: Error saving context:', chrome.runtime.lastError);
+        uploadInfo.textContent = `Error saving context: ${chrome.runtime.lastError.message || 'Storage limit exceeded'}. Try removing some PDFs.`;
+        uploadInfo.className = 'upload-info upload-error';
+        return;
+      }
+      
       console.log('TruthTeller: Context settings saved', {
-        customContext: customContext ? `${customContext.length} chars` : 'Not set',
+        customContext: customContext ? `${wordCount.toLocaleString()} words / ${characterCount.toLocaleString()} chars (${estimatedSizeKB}KB)` : 'Not set',
         useCustomContext: useCustomContext,
-        uploadedPdfs: uploadedPdfs.length > 0 ? `${uploadedPdfs.length} PDFs` : 'None'
+        uploadedPdfs: uploadedPdfs.length > 0 ? `${uploadedPdfs.length} PDFs (${estimatedSizeKB}KB)` : 'None'
       });
       
       updateContextIndicator();
+      
+      // Show success message
+      uploadInfo.textContent = `Context saved successfully (${estimatedSizeKB}KB / ${wordCount.toLocaleString()} words / ${characterCount.toLocaleString()} chars).`;
+      uploadInfo.className = 'upload-info upload-success';
     });
   }
 
@@ -601,6 +737,11 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Update the title to show info about context sources
       let title = 'Custom context is active';
+      
+      if (customContext && customContext.length > 0) {
+        const wordCount = customContext.trim().split(/\s+/).length;
+        title += ` - ${wordCount.toLocaleString()} words, ${customContext.length.toLocaleString()} characters`;
+      }
       
       if (uploadedPdfs.length > 0) {
         title += ` - Using ${uploadedPdfs.length} PDF${uploadedPdfs.length > 1 ? 's' : ''}`;

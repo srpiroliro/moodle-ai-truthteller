@@ -66,25 +66,17 @@
    */
   async function loadSettings() {
     return new Promise((resolve) => {
+      // Load API keys and model preferences from sync storage
       chrome.storage.sync.get(
-        ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel', 'customContext', 'useCustomContext', 'uploadedPdfs'],
-        function(result) {
-          state.apiKeys.openai = result.openaiApiKey || null;
-          state.apiKeys.claude = result.claudeApiKey || null;
-          state.apiKeys.grok = result.grokApiKey || null;
-          
-          // Load custom context settings
-          state.customContext = result.customContext || '';
-          state.useCustomContext = result.useCustomContext || false;
-          
-          // Load uploaded PDFs if available
-          if (result.uploadedPdfs && Array.isArray(result.uploadedPdfs)) {
-            state.uploadedPdfs = result.uploadedPdfs;
-          }
+        ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel'],
+        function(syncResult) {
+          state.apiKeys.openai = syncResult.openaiApiKey || null;
+          state.apiKeys.claude = syncResult.claudeApiKey || null;
+          state.apiKeys.grok = syncResult.grokApiKey || null;
           
           // If a model is selected in storage, use it; otherwise use the default
-          if (result.selectedModel) {
-            state.preferredModel = result.selectedModel;
+          if (syncResult.selectedModel) {
+            state.preferredModel = syncResult.selectedModel;
           } else {
             // Use the default model from models.js if available
             try {
@@ -96,17 +88,50 @@
             }
           }
           
-          console.log('TruthTeller: Settings loaded', {
-            selectedModel: state.preferredModel,
-            customContext: state.customContext ? `Set (${state.customContext.length} chars)` : 'Not set',
-            useCustomContext: state.useCustomContext,
-            uploadedPdfs: state.uploadedPdfs.length > 0 ? `${state.uploadedPdfs.length} PDFs` : 'None'
-          });
-          
-          resolve();
+          // Load larger context data from local storage
+          chrome.storage.local.get(
+            ['customContext', 'useCustomContext', 'uploadedPdfs'],
+            function(localResult) {
+              // If not found in local storage, check sync storage for legacy data
+              if ((!localResult.customContext && !localResult.uploadedPdfs) || 
+                  (localResult.uploadedPdfs && localResult.uploadedPdfs.length === 0)) {
+                
+                chrome.storage.sync.get(
+                  ['customContext', 'useCustomContext', 'uploadedPdfs'],
+                  function(legacyResult) {
+                    loadContextData(legacyResult);
+                    resolve();
+                  }
+                );
+              } else {
+                // Data is already in local storage
+                loadContextData(localResult);
+                resolve();
+              }
+            }
+          );
         }
       );
     });
+    
+    // Helper function to load context data from storage result
+    function loadContextData(result) {
+      // Load custom context settings
+      state.customContext = result.customContext || '';
+      state.useCustomContext = result.useCustomContext || false;
+      
+      // Load uploaded PDFs if available
+      if (result.uploadedPdfs && Array.isArray(result.uploadedPdfs)) {
+        state.uploadedPdfs = result.uploadedPdfs;
+      }
+      
+      console.log('TruthTeller: Settings loaded', {
+        selectedModel: state.preferredModel,
+        customContext: state.customContext ? `Set (${state.customContext.length} chars)` : 'Not set',
+        useCustomContext: state.useCustomContext,
+        uploadedPdfs: state.uploadedPdfs.length > 0 ? `${state.uploadedPdfs.length} PDFs` : 'None'
+      });
+    }
   }
 
   /**
