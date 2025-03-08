@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "TruthTeller LLM Chat",
+  "version": "1.0.0",
+  "description": "Chat with different LLMs using your API keys and get assistance with Moodle quizzes",
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "*://*/*",
+    "https://api.openai.com/v1/*",
+    "https://api.anthropic.com/v1/*",
+    "https://api.grok.ai/v1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["js/models.js", "js/content.js"],
+      "css": ["css/content.css"]
+    }
+  ],
+  "background": {
+    "service_worker": "js/background.js",
+    "type": "module"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

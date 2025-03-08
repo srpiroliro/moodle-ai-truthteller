@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TruthTeller LLM Chat</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>TruthTeller</h1>
+      <div class="header-buttons">
+        <button class="info-button" id="moodleInfoToggle" title="Moodle Quiz Helper Info">📝</button>
+        <button class="settings-button" id="settingsButton" title="Settings">⚙️</button>
+      </div>
+    </div>
+
+    <div class="info-panel" id="moodleInfoPanel">
+      <h3>Moodle Quiz Helper</h3>
+      <p>TruthTeller can help you with Moodle quizzes by suggesting the most likely correct answers.</p>
+      <ol>
+        <li>Enter your API key in the settings</li>
+        <li>Visit a Moodle quiz page</li>
+        <li>Click the "Analyze Quiz Questions" button that appears</li>
+        <li>Wait for analysis to complete</li>
+        <li>See probable answers marked with confidence indicators:</li>
+      </ol>
+      <div class="confidence-examples">
+        <div class="confidence-example">
+          <div class="example-indicator high">✓</div>
+          <div>High confidence</div>
+        </div>
+        <div class="confidence-example">
+          <div class="example-indicator medium">!</div>
+          <div>Medium confidence</div>
+        </div>
+        <div class="confidence-example">
+          <div class="example-indicator low">?</div>
+          <div>Low confidence</div>
+        </div>
+      </div>
+      <p class="note"><strong>Note:</strong> TruthTeller only suggests answers but does not select them for you. Always
+        verify answers yourself before submitting.</p>
+    </div>
+
+    <div class="settings-panel" id="settingsPanel">
+      <div class="api-key-input">
+        <label for="openaiApiKey">OpenAI API Key:</label>
+        <input type="password" id="openaiApiKey" placeholder="Enter your OpenAI API key">
+      </div>
+      <div class="api-key-input">
+        <label for="claudeApiKey">Anthropic Claude API Key:</label>
+        <input type="password" id="claudeApiKey" placeholder="Enter your Anthropic API key">
+      </div>
+      <div class="api-key-input">
+        <label for="grokApiKey">Grok API Key:</label>
+        <input type="password" id="grokApiKey" placeholder="Enter your Grok API key">
+      </div>
+
+      <div class="default-model-setting">
+        <label for="defaultModelSelect">Default Model:</label>
+        <select id="defaultModelSelect">
+          <!-- Options will be populated dynamically from models.js -->
+        </select>
+        <p class="setting-hint">This model will be used as the default for both the chat and Moodle quiz analysis.</p>
+      </div>
+
+      <button class="save-button" id="saveSettings">Save Settings</button>
+    </div>
+
+    <div class="model-selector">
+      <select id="modelSelect">
+        <!-- Options will be populated dynamically from models.js -->
+      </select>
+    </div>
+
+    <div class="chat-container" id="chatContainer">
+      <!-- Messages will be inserted here dynamically -->
+    </div>
+
+    <div class="input-container">
+      <textarea class="message-input" id="messageInput" placeholder="Type your message..." rows="1"></textarea>
+      <button class="send-button" id="sendButton">→</button>
+    </div>
+  </div>
+
+  <script src="js/models.js"></script>
+  <script src="js/popup.js"></script>
+</body>
+
+</html>
