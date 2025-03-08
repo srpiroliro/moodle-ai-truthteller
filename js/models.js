@@ -77,73 +77,82 @@ function getApiModelId(modelId) {
   return model ? model.apiId : modelId; // Fallback to original ID if not found
 }
 
-// OpenAI API call function
-async function callOpenAI(message, modelId, apiKey) {
-  // Get the proper API model ID
-  const apiModelId = getApiModelId(modelId);
-  
+/**
+ * Makes an API call to an LLM service through the background script
+ * @param {string} type - The type of API call (openai_api_call, claude_api_call, grok_api_call)
+ * @param {string} url - The API endpoint URL
+ * @param {Object} headers - Request headers
+ * @param {Object} body - Request body as a JavaScript object (will be stringified)
+ * @param {Function} responseParser - Function to parse the successful response
+ * @returns {Promise<string>} - The text response from the LLM
+ */
+async function makeApiCall(type, url, headers, body, responseParser) {
   try {
     // Create the request payload
     const requestData = {
-      type: 'openai_api_call',
-      url: 'https://api.openai.com/v1/chat/completions',
+      type: type,
+      url: url,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: apiModelId,
-        messages: [
-          { role: 'user', content: message }
-        ],
-        temperature: 0.7
-      })
+      headers: headers,
+      body: JSON.stringify(body)
     };
-    
-    // Force the API call to always proceed in extension environment
-    console.log('TruthTeller: Making OpenAI API call to', apiModelId);
     
     // Send the request through the Chrome runtime messaging API
     return new Promise((resolve, reject) => {
       try {
         chrome.runtime.sendMessage(requestData, function(response) {
           if (chrome.runtime.lastError) {
-            console.error('TruthTeller: Chrome runtime error:', chrome.runtime.lastError);
             reject(new Error(chrome.runtime.lastError.message));
             return;
           }
           
           if (!response) {
-            console.error('TruthTeller: No response received from background script');
             reject(new Error('No response received from background script'));
             return;
           }
           
           if (response.error) {
-            console.error('TruthTeller: Error in response:', response.error);
             reject(new Error(response.error));
             return;
           }
           
           try {
             const data = JSON.parse(response.data);
-            console.log('TruthTeller: OpenAI API response received');
-            resolve(data.choices[0].message.content);
+            resolve(responseParser(data));
           } catch (error) {
-            console.error('TruthTeller: Error parsing OpenAI API response:', error, response.data);
-            reject(new Error(`Error parsing OpenAI API response: ${error.message}`));
+            reject(new Error(`Error parsing ${type} response: ${error.message}`));
           }
         });
       } catch (sendError) {
-        console.error('TruthTeller: Error sending message to background script:', sendError);
         reject(new Error(`Error sending message to background script: ${sendError.message}`));
       }
     });
   } catch (error) {
-    console.error('TruthTeller: OpenAI API error:', error);
-    throw new Error(`OpenAI API error: ${error.message}`);
+    throw new Error(`${type} error: ${error.message}`);
   }
+}
+
+// OpenAI API call function
+async function callOpenAI(message, modelId, apiKey) {
+  // Get the proper API model ID
+  const apiModelId = getApiModelId(modelId);
+  
+  return makeApiCall(
+    'openai_api_call',
+    'https://api.openai.com/v1/chat/completions',
+    {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    {
+      model: apiModelId,
+      messages: [
+        { role: 'user', content: message }
+      ],
+      temperature: 0.7
+    },
+    (data) => data.choices[0].message.content
+  );
 }
 
 // Claude API call function
@@ -151,77 +160,30 @@ async function callClaude(message, modelId, apiKey) {
   // Get the proper API model ID
   const apiModelId = getApiModelId(modelId);
   
-  try {
-    // Create the request payload
-    const requestData = {
-      type: 'claude_api_call',
-      url: 'https://api.anthropic.com/v1/messages',
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: apiModelId,
-        max_tokens: 1024,
-        messages: [
-          { role: 'user', content: message }
-        ]
-      })
-    };
-    
-    // Force the API call to always proceed in extension environment
-    console.log('TruthTeller: Making Claude API call to', apiModelId);
-    
-    // Send the request through the Chrome runtime messaging API
-    return new Promise((resolve, reject) => {
-      try {
-        chrome.runtime.sendMessage(requestData, function(response) {
-          if (chrome.runtime.lastError) {
-            console.error('TruthTeller: Chrome runtime error:', chrome.runtime.lastError);
-            reject(new Error(chrome.runtime.lastError.message));
-            return;
-          }
-          
-          if (!response) {
-            console.error('TruthTeller: No response received from background script');
-            reject(new Error('No response received from background script'));
-            return;
-          }
-          
-          if (response.error) {
-            console.error('TruthTeller: Error in response:', response.error);
-            reject(new Error(response.error));
-            return;
-          }
-          
-          try {
-            const data = JSON.parse(response.data);
-            console.log('TruthTeller: Claude API response received:', data);
-            
-            // Extract text content from the response
-            if (data && data.content && Array.isArray(data.content) && data.content.length > 0) {
-              resolve(data.content[0].text);
-            } else {
-              console.error('TruthTeller: Unexpected Claude API response format:', data);
-              reject(new Error('Unexpected Claude API response format'));
-            }
-          } catch (error) {
-            console.error('TruthTeller: Error parsing Claude API response:', error, response.data);
-            reject(new Error(`Error parsing Claude API response: ${error.message}`));
-          }
-        });
-      } catch (sendError) {
-        console.error('TruthTeller: Error sending message to background script:', sendError);
-        reject(new Error(`Error sending message to background script: ${sendError.message}`));
+  return makeApiCall(
+    'claude_api_call',
+    'https://api.anthropic.com/v1/messages',
+    {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    {
+      model: apiModelId,
+      max_tokens: 1024,
+      messages: [
+        { role: 'user', content: message }
+      ]
+    },
+    (data) => {
+      if (data && data.content && Array.isArray(data.content) && data.content.length > 0) {
+        return data.content[0].text;
+      } else {
+        throw new Error('Unexpected Claude API response format');
       }
-    });
-  } catch (error) {
-    console.error('TruthTeller: Claude API error:', error);
-    throw new Error(`Claude API error: ${error.message}`);
-  }
+    }
+  );
 }
 
 // Grok API call function
@@ -230,65 +192,23 @@ async function callGrok(message, modelId, apiKey) {
   const apiModelId = getApiModelId(modelId);
   
   try {
-    // Create the request payload
-    const requestData = {
-      type: 'grok_api_call',
-      url: 'https://api.grok.ai/v1/chat/completions',
-      method: 'POST',
-      headers: {
+    return makeApiCall(
+      'grok_api_call',
+      'https://api.grok.ai/v1/chat/completions',
+      {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
+      {
         model: apiModelId,
         messages: [
           { role: 'user', content: message }
         ],
         temperature: 0.7
-      })
-    };
-    
-    // Force the API call to always proceed in extension environment
-    console.log('TruthTeller: Making Grok API call to', apiModelId);
-    
-    // Send the request through the Chrome runtime messaging API
-    return new Promise((resolve, reject) => {
-      try {
-        chrome.runtime.sendMessage(requestData, function(response) {
-          if (chrome.runtime.lastError) {
-            console.error('TruthTeller: Chrome runtime error:', chrome.runtime.lastError);
-            reject(new Error(chrome.runtime.lastError.message));
-            return;
-          }
-          
-          if (!response) {
-            console.error('TruthTeller: No response received from background script');
-            reject(new Error('No response received from background script'));
-            return;
-          }
-          
-          if (response.error) {
-            console.error('TruthTeller: Error in response:', response.error);
-            reject(new Error(response.error));
-            return;
-          }
-          
-          try {
-            const data = JSON.parse(response.data);
-            console.log('TruthTeller: Grok API response received');
-            resolve(data.choices[0].message.content);
-          } catch (error) {
-            console.error('TruthTeller: Error parsing Grok API response:', error, response.data);
-            reject(new Error(`Error parsing Grok API response: ${error.message}`));
-          }
-        });
-      } catch (sendError) {
-        console.error('TruthTeller: Error sending message to background script:', sendError);
-        reject(new Error(`Error sending message to background script: ${sendError.message}`));
-      }
-    });
+      },
+      (data) => data.choices[0].message.content
+    );
   } catch (error) {
-    console.error('TruthTeller: Grok API error:', error);
     // For now, return a notice about Grok API being a placeholder
     return "Note: The Grok API implementation is currently a placeholder. Please check if X (Twitter) has released their Grok API publicly yet.";
   }

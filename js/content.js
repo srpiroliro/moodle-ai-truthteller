@@ -33,6 +33,9 @@
         // Add control panel to the page
         addControlPanel();
         
+        // Add keyboard shortcut listener
+        document.addEventListener('keydown', handleKeyboardShortcuts);
+        
         // Log loaded API keys (without exposing full keys)
         console.log('TruthTeller: API keys loaded', {
           openai: state.apiKeys.openai ? 'Set' : 'Not set',
@@ -101,10 +104,16 @@
     
     const clearButton = document.createElement('button');
     clearButton.className = 'truthteller-button';
-    clearButton.textContent = 'Clear All Analysis';
+    clearButton.textContent = 'Clear';
     clearButton.addEventListener('click', clearAnalysis);
     
+    // Add shortcut hint
+    const shortcutHint = document.createElement('div');
+    shortcutHint.className = 'truthteller-shortcut-hint';
+    shortcutHint.textContent = 'Press Alt+T to hide/show all results';
+    
     controlPanel.appendChild(clearButton);
+    controlPanel.appendChild(shortcutHint);
     document.body.appendChild(controlPanel);
     
     // Add individual analyze buttons to each question
@@ -126,13 +135,26 @@
       const buttonContainer = document.createElement('div');
       buttonContainer.className = 'truthteller-question-controls';
       
+      // Create buttons container
+      const buttonsContainer = document.createElement('div');
+      buttonsContainer.className = 'truthteller-buttons-container';
+      
       // Create analyze button for this question
       const analyzeButton = document.createElement('button');
       analyzeButton.className = 'truthteller-question-button';
-      analyzeButton.textContent = 'Analyze This Question';
+      analyzeButton.textContent = '[ analyze ]';
       analyzeButton.type = 'button'; // Explicitly set button type to prevent form submission
       analyzeButton.dataset.questionId = questionId;
       analyzeButton.addEventListener('click', (e) => handleSingleQuestionAnalyzeClick(e, question));
+      
+      // Create toggle button (initially hidden until analysis is done)
+      const toggleButton = document.createElement('button');
+      toggleButton.className = 'truthteller-toggle-button';
+      toggleButton.type = 'button';
+      toggleButton.dataset.questionId = questionId;
+      toggleButton.style.display = 'none'; // Initially hidden
+      toggleButton.innerHTML = '[ hide ]';
+      toggleButton.addEventListener('click', (e) => toggleAnalysisDisplay(e, questionId));
       
       // Create result display area
       const resultDisplay = document.createElement('div');
@@ -141,7 +163,9 @@
       resultDisplay.style.display = 'none';
       
       // Add elements to the container
-      buttonContainer.appendChild(analyzeButton);
+      buttonsContainer.appendChild(analyzeButton);
+      buttonsContainer.appendChild(toggleButton);
+      buttonContainer.appendChild(buttonsContainer);
       buttonContainer.appendChild(resultDisplay);
       
       // Find a good place to insert the button (after the question text)
@@ -165,11 +189,8 @@
     
     const questionId = event.target.dataset.questionId || questionElement.id;
     
-    console.log('TruthTeller: Analyze button clicked for question', questionId);
-    
     // Prevent analyzing if already in progress
     if (state.isAnalyzing.get(questionId)) {
-      console.log('TruthTeller: Analysis already in progress for question', questionId);
       return;
     }
     
@@ -178,26 +199,19 @@
     
     // If model is not found, use the default model
     if (!selectedModel) {
-      console.warn(`TruthTeller: Model "${state.preferredModel}" not found, falling back to default model`);
+      console.warn(`Model "${state.preferredModel}" not found, falling back to default model`);
       state.preferredModel = getDefaultModelId(); // Set to default model
       selectedModel = getModelById(state.preferredModel);
       
       if (!selectedModel) {
         alert('Unable to find an appropriate model. Please check your settings.');
-        console.error('TruthTeller: Both selected and default models not found');
+        console.error('Both selected and default models not found');
         return;
       }
     }
     
     // Get the API key based on the model's provider
     const apiKey = state.apiKeys[selectedModel.provider];
-    
-    console.log('TruthTeller: Selected model and API key', {
-      modelId: selectedModel.id,
-      modelName: selectedModel.name,
-      provider: selectedModel.provider,
-      apiKeyAvailable: apiKey ? 'Yes' : 'No'
-    });
     
     // Validate API key
     if (!apiKey) {
@@ -207,7 +221,7 @@
       alert(`API key for ${selectedModel.name} is empty. Please add a valid API key in the extension popup.`);
       return;
     } else if (selectedModel.provider === 'claude' && !apiKey.startsWith('sk-')) {
-      console.warn('TruthTeller: Claude API key doesn\'t start with "sk-". This might cause issues.');
+      console.warn('Claude API key doesn\'t start with "sk-". This might cause issues.');
     }
     
     // Set analyzing state for this question
@@ -224,32 +238,24 @@
       
       // Check if we got any options
       if (questionData.options.length === 0) {
-        console.warn('TruthTeller: No options found for question', questionId);
+        console.warn('No options found for question', questionId);
         alert('Unable to find answer options for this question. Please try a different question.');
         state.isAnalyzing.set(questionId, false);
         analyzeButton.textContent = originalText;
         return;
       }
       
-      // Log what we're about to send to the LLM
-      console.log('TruthTeller: Analyzing question', {
+      // Log what we're about to analyze
+      console.log('Analyzing question:', {
         id: questionId,
         text: questionData.text,
         type: questionData.type,
-        options: questionData.options.map(o => o.text)
+        optionsCount: questionData.options.length
       });
       
-      // Construct prompt and log it
-      const prompt = constructQuestionPrompt(questionData);
-      console.log('TruthTeller: Prompt sent to LLM:', prompt);
-      
       // Analyze question with LLM
-      console.log('TruthTeller: Calling API with model', selectedModel.id);
+      console.log('Calling API with model:', selectedModel.id);
       const analysis = await analyzeQuestion(questionData, state.preferredModel, apiKey);
-      
-      // Log the response from the LLM
-      console.log('TruthTeller: LLM response:', analysis.rawResponse);
-      console.log('TruthTeller: Parsed analysis:', analysis);
       
       // Store analysis result
       state.analyzedQuestions.set(questionId, analysis);
@@ -260,10 +266,8 @@
       // Display result in the UI
       displayAnalysisResult(questionId, analysis);
       
-      console.log('TruthTeller: Analysis complete for question', questionId);
-      
     } catch (error) {
-      console.error('TruthTeller: Error analyzing question:', error);
+      console.error('Error analyzing question:', error);
       alert(`Error analyzing question: ${error.message}`);
     } finally {
       // Reset analyzing state for this question
@@ -357,22 +361,176 @@
     
     // Add to result display
     resultDisplay.appendChild(resultContent);
-    resultDisplay.style.display = 'block';
+    
+    // Make toggle button visible
+    const toggleButton = document.querySelector(`button.truthteller-toggle-button[data-question-id="${questionId}"]`);
+    if (toggleButton) {
+      toggleButton.style.display = 'flex';
+    }
+    
+    // Check if the user had a previous preference for this question
+    try {
+      const displayPreference = sessionStorage.getItem(`truthteller-display-${questionId}`);
+      if (displayPreference === 'hidden') {
+        // User previously chose to hide this analysis
+        resultDisplay.classList.add('hidden');
+        resultDisplay.style.display = 'none';
+        
+        if (toggleButton) {
+          toggleButton.innerHTML = '[ show ]';
+          toggleButton.classList.add('hidden-state');
+        }
+      } else {
+        // Show by default or if previously visible
+        resultDisplay.classList.remove('hidden');
+        resultDisplay.style.display = 'block';
+      }
+    } catch (e) {
+      // Default to showing if storage access fails
+      resultDisplay.classList.remove('hidden');
+      resultDisplay.style.display = 'block';
+    }
   }
 
   /**
    * Find all Moodle quiz questions on the page
    */
   function findMoodleQuestions() {
-    // Typical Moodle question container has class 'que'
-    const questionElements = Array.from(document.querySelectorAll('.que'));
+    let questionElements = [];
     
-    // Filter out any non-question elements
-    return questionElements.filter(el => {
-      // Make sure it has a question text and options
-      return el.querySelector('.qtext') && 
-             (el.querySelector('.answer') || el.querySelector('.ablock'));
+    // Approach 1: Look for standard Moodle question containers with class 'que'
+    const standardQuestions = Array.from(document.querySelectorAll('.que'));
+    if (standardQuestions.length > 0) {
+      console.log('TruthTeller: Found questions using standard .que selector');
+      questionElements = standardQuestions;
+    }
+    
+    // If no questions found, try alternative selectors
+    if (questionElements.length === 0) {
+      // Approach 2: Look for form with questions inside
+      const quizForm = document.querySelector('form#responseform, form[action*="quiz"], form[action*="attempt.php"]');
+      if (quizForm) {
+        console.log('TruthTeller: Found quiz form, searching for questions inside');
+        
+        // Try to find question containers within the form
+        const formQuestions = Array.from(quizForm.querySelectorAll('div[id^="question"]'));
+        if (formQuestions.length > 0) {
+          console.log('TruthTeller: Found questions inside quiz form');
+          questionElements = formQuestions;
+        }
+      }
+    }
+    
+    // Approach 3: Look for common question identifiers if still no questions found
+    if (questionElements.length === 0) {
+      console.log('TruthTeller: Trying alternative question identifiers');
+      
+      // Try multiple selectors that might indicate a question
+      const selectors = [
+        // Common Moodle question containers
+        '.questionflagsaveform .qn_buttons', 
+        '.questionflagpostdata',
+        '.formulation',
+        '.content .formulation',
+        // Questions with numbers
+        'div[id^="q"][id$="question"]',
+        // Questions with specific structure
+        '.que .content',
+        // Other common patterns
+        '.question-text',
+        '.question-container',
+        '[data-region="question"]'
+      ];
+      
+      // Try each selector
+      for (const selector of selectors) {
+        const elements = Array.from(document.querySelectorAll(selector));
+        if (elements.length > 0) {
+          console.log(`TruthTeller: Found potential questions using selector: ${selector}`);
+          // For selectors that find parts of questions, find parent question containers
+          questionElements = elements.map(el => {
+            // Try to find the containing question by going up to parent elements
+            let container = el;
+            // Go up to 5 levels to find a suitable container
+            for (let i = 0; i < 5; i++) {
+              if (!container.parentElement) break;
+              container = container.parentElement;
+              if (container.classList.contains('que') || 
+                  container.id && container.id.includes('question') ||
+                  container.className && container.className.includes('question')) {
+                return container; // Found a question container
+              }
+            }
+            return el.closest('div') || el; // Fallback
+          });
+          break;
+        }
+      }
+    }
+    
+    // Approach 4: Last resort - look for any elements that contain both text and radio/checkbox inputs
+    if (questionElements.length === 0) {
+      console.log('TruthTeller: Using last resort approach to find questions');
+      
+      // Find all paragraphs that might be question text
+      const possibleQuestionTexts = Array.from(document.querySelectorAll('p, div.text, .content p'));
+      
+      // For each possible text, look for nearby inputs
+      questionElements = possibleQuestionTexts.filter(textEl => {
+        // Check if there are inputs near this text (up to 3 parent levels up and then down)
+        let container = textEl;
+        for (let i = 0; i < 3; i++) {
+          if (!container.parentElement) break;
+          container = container.parentElement;
+          
+          // Check if this container has inputs
+          const hasInputs = container.querySelectorAll('input[type="radio"], input[type="checkbox"]').length > 0;
+          if (hasInputs) {
+            return true;
+          }
+        }
+        return false;
+      }).map(textEl => {
+        // Find the common container for the text and inputs
+        let container = textEl;
+        for (let i = 0; i < 3; i++) {
+          if (!container.parentElement) break;
+          container = container.parentElement;
+          if (container.querySelectorAll('input[type="radio"], input[type="checkbox"]').length > 0) {
+            return container;
+          }
+        }
+        return textEl.closest('div') || textEl;
+      });
+    }
+    
+    // Remove duplicates
+    questionElements = [...new Set(questionElements)];
+    
+    console.log(`TruthTeller: Found ${questionElements.length} quiz questions`);
+    
+    // Filter out any non-question elements - those without text or options
+    const validQuestions = questionElements.filter(el => {
+      // Check for question text - try multiple selectors
+      const hasText = el.querySelector('.qtext, .text, .content p, p, .question-text') !== null;
+      
+      // Check for answer options - try multiple types of inputs and answer containers
+      const hasOptions = 
+        el.querySelector('.answer, .ablock, input[type="radio"], input[type="checkbox"], select, textarea') !== null;
+      
+      return hasText && hasOptions;
     });
+    
+    console.log(`TruthTeller: ${validQuestions.length} valid questions after filtering`);
+    
+    // If no valid questions found but we found elements, return the original set
+    // This is a fallback to ensure we always return something if questions exist
+    if (validQuestions.length === 0 && questionElements.length > 0) {
+      console.log('TruthTeller: Returning unfiltered questions as fallback');
+      return questionElements;
+    }
+    
+    return validQuestions;
   }
 
   /**
@@ -382,21 +540,71 @@
     // Get question ID from element ID or data attribute
     const id = questionElement.id || `q_${Math.random().toString(36).substring(2, 9)}`;
     
-    // Get question text
-    const questionTextEl = questionElement.querySelector('.qtext');
-    const questionText = questionTextEl ? questionTextEl.textContent.trim() : '';
+    // Get question text - try multiple potential selectors
+    const questionTextSelectors = [
+      '.qtext', 
+      '.question-text', 
+      '.content p', 
+      'p',
+      '.text',
+      '.formulation',
+      '.stem',
+      'h4 + div',
+      '[data-region="question-text"]'
+    ];
+    
+    let questionText = '';
+    
+    // Try each selector until we find text
+    for (const selector of questionTextSelectors) {
+      const textEl = questionElement.querySelector(selector);
+      if (textEl && textEl.textContent.trim()) {
+        questionText = textEl.textContent.trim();
+        break;
+      }
+    }
+    
+    // If still no text found, try to get any text from the question
+    if (!questionText) {
+      // Extract all text nodes directly under the question element
+      const textNodes = Array.from(questionElement.childNodes)
+        .filter(node => node.nodeType === 3 && node.textContent.trim())
+        .map(node => node.textContent.trim());
+        
+      if (textNodes.length > 0) {
+        questionText = textNodes.join(' ');
+      } else {
+        // Last resort: just get all text content
+        questionText = questionElement.textContent.trim().substring(0, 200);
+      }
+    }
     
     // Get question type
     let questionType = 'unknown';
     
-    if (questionElement.classList.contains('multichoice')) {
-      questionType = questionElement.querySelector('input[type="radio"]') ? 'single-choice' : 'multiple-choice';
-    } else if (questionElement.classList.contains('truefalse')) {
+    // Try to determine question type from class names or content
+    if (questionElement.classList.contains('multichoice') || 
+        questionElement.querySelectorAll('input[type="radio"]').length > 0) {
+      questionType = 'single-choice';
+    } else if (questionElement.classList.contains('multichoiceset') || 
+               questionElement.querySelectorAll('input[type="checkbox"]').length > 0) {
+      questionType = 'multiple-choice';
+    } else if (questionElement.classList.contains('truefalse') || 
+               questionElement.querySelector('.answer input[value="1"]') && 
+               questionElement.querySelector('.answer input[value="0"]')) {
       questionType = 'true-false';
-    } else if (questionElement.classList.contains('match')) {
+    } else if (questionElement.classList.contains('match') || 
+               questionElement.querySelectorAll('select').length > 0) {
       questionType = 'matching';
-    } else if (questionElement.classList.contains('essay')) {
+    } else if (questionElement.classList.contains('essay') || 
+               questionElement.querySelector('textarea')) {
       questionType = 'essay';
+    } else if (questionElement.querySelectorAll('input[type="radio"]').length > 0) {
+      // If we have radio buttons but no specific class, assume single choice
+      questionType = 'single-choice';
+    } else if (questionElement.querySelectorAll('input[type="checkbox"]').length > 0) {
+      // If we have checkboxes but no specific class, assume multiple choice
+      questionType = 'multiple-choice';
     }
     
     // Get answer options
@@ -405,21 +613,27 @@
     if (questionType === 'single-choice' || questionType === 'multiple-choice' || questionType === 'true-false') {
       // Try different selectors for different Moodle themes/versions
       const optionSelectors = [
-        '.answer div.r',                 // Common format
-        '.answer label',                 // Alternative format
-        '.answer div[id^="q"]',          // Another alternative
-        '.ablock .answer div',           // Yet another format
-        '.answernumber',                 // Numbered format
-        '.answer input[type="radio"]',   // Radio button format
-        '.answer input[type="checkbox"]' // Checkbox format
+        '.answer div.r',                       // Common format
+        '.answer label',                       // Alternative format
+        '.answer div[id^="q"]',                // Another alternative
+        '.ablock .answer div',                 // Yet another format
+        '.answernumber',                       // Numbered format
+        '.answer input[type="radio"]',         // Radio button format
+        '.answer input[type="checkbox"]',      // Checkbox format
+        'input[type="radio"]',                 // Any radio button within question
+        'input[type="checkbox"]',              // Any checkbox within question
+        '.option',                             // Generic option class
+        '.choice',                             // Generic choice class
+        'label',                               // Any label in question
+        'div > input[type="radio"] + label',   // Input followed by label
+        'div > input[type="checkbox"] + label' // Input followed by label
       ];
       
       // Try each selector until we find options
       let optionElements = [];
       for (const selector of optionSelectors) {
         optionElements = Array.from(questionElement.querySelectorAll(selector));
-        if (optionElements.length > 0) {
-          console.log('TruthTeller: Found options using selector:', selector);
+        if (optionElements.length > 1) { // Need at least 2 options to be valid
           break;
         }
       }
@@ -428,35 +642,56 @@
       optionElements.forEach((optionEl, index) => {
         // First try to get text from a label element
         let optionText = '';
-        let labelEl = optionEl.querySelector('label');
+        let labelEl = null;
         
+        if (optionEl.tagName === 'LABEL') {
+          // The element itself is a label
+          labelEl = optionEl;
+        } else if (optionEl.tagName === 'INPUT') {
+          // If it's an input, find associated label by for=id
+          labelEl = document.querySelector(`label[for="${optionEl.id}"]`);
+          
+          // If no label found by ID, look for parent label or next sibling label
+          if (!labelEl) {
+            labelEl = optionEl.closest('label') || 
+                      optionEl.nextElementSibling?.tagName === 'LABEL' ? optionEl.nextElementSibling : null;
+          }
+        } else {
+          // Look for a label inside this element
+          labelEl = optionEl.querySelector('label');
+        }
+        
+        // Extract text from label if found
         if (labelEl) {
           optionText = labelEl.textContent.trim();
-        } else if (optionEl.tagName === 'LABEL') {
-          // The element itself is a label
-          optionText = optionEl.textContent.trim();
         } else {
-          // Try getting text from adjacent elements
-          const nextDiv = optionEl.querySelector('div');
-          if (nextDiv) {
-            optionText = nextDiv.textContent.trim();
+          // Try to get text from various places
+          const optionContentEl = optionEl.querySelector('.text, .content, p, div');
+          if (optionContentEl) {
+            optionText = optionContentEl.textContent.trim();
           } else {
-            // Last resort: get all text content
+            // Last resort: use the element's own text content
             optionText = optionEl.textContent.trim();
           }
         }
         
         // Get option value from input
         let value = '';
-        const inputEl = optionEl.querySelector('input') || 
-                        (optionEl.tagName === 'INPUT' ? optionEl : null);
+        let inputEl = null;
+        
+        if (optionEl.tagName === 'INPUT') {
+          inputEl = optionEl;
+        } else {
+          inputEl = optionEl.querySelector('input') || questionElement.querySelector(`input[id$="${index}"]`);
+        }
         
         if (inputEl) {
           value = inputEl.value;
         }
         
-        // Clean up the option text
-        optionText = optionText.replace(/^\s*[a-z]\.\s+/i, ''); // Remove "a. " prefix
+        // Clean up the option text (remove letter prefixes like "a. ")
+        optionText = optionText.replace(/^\s*[a-z]\.\s+/i, '');
+        optionText = optionText.replace(/^\s*\d+\.\s+/i, '');
         
         // Add option to list if we found some text
         if (optionText) {
@@ -483,45 +718,35 @@
    * Analyze a question using the selected LLM
    */
   async function analyzeQuestion(questionData, modelId, apiKey) {
-    console.log(`TruthTeller: Starting analysis with model ${modelId}`);
-    
     // Construct prompt for the LLM
     const prompt = constructQuestionPrompt(questionData);
     
     try {
       // Call the appropriate API based on the model
-      console.log(`TruthTeller: Getting API call function for model ${modelId}`);
       let apiCallFunction = getApiCallFunction(modelId);
-      
-      console.log('TruthTeller: Calling API function with prompt');
       let response = await apiCallFunction(prompt, modelId, apiKey);
       
-      console.log('TruthTeller: API call successful, response received');
+      // Log the response for debugging (but don't store in state)
+      console.log('LLM response:', response);
       
       // Parse the LLM response
-      console.log('TruthTeller: Parsing response');
       const analysis = parseAnalysisResponse(response, questionData);
-      
-      // Store the raw response for logging
-      analysis.rawResponse = response;
       
       // Mark this as a real response
       analysis.isMockResponse = false;
       
-      console.log('TruthTeller: Analysis completed successfully');
       return analysis;
     } catch (error) {
-      console.error('TruthTeller: Error calling LLM API:', error);
+      console.error('Error calling LLM API:', error);
       
       // Use mock response data when API calls fail
-      console.log('TruthTeller: Using mock response data as fallback');
+      console.log('Using mock response data as fallback');
       
       // Generate a mock response based on the question data
       const mockResponse = generateMockResponse(questionData);
       
       // Parse the mock response
       const analysis = parseAnalysisResponse(mockResponse, questionData);
-      analysis.rawResponse = mockResponse;
       analysis.justification += ' (MOCK RESPONSE - API CALL FAILED)';
       analysis.isMockResponse = true;
       analysis.errorMessage = error.message;
@@ -596,8 +821,7 @@ Response:`;
       questionId: questionData.id,
       probableAnswers: [],
       confidence: 'LOW',
-      justification: '',
-      rawResponse: response
+      justification: ''
     };
     
     try {
@@ -701,13 +925,124 @@ Response:`;
     // Remove all indicators
     document.querySelectorAll('.truthteller-indicator').forEach(el => el.remove());
     
+    // Hide all toggle buttons and reset their state
+    document.querySelectorAll('.truthteller-toggle-button').forEach(el => {
+      el.style.display = 'none';
+      el.innerHTML = '[ hide ]';
+      el.classList.remove('hidden-state');
+    });
+    
     // Hide all result displays
     document.querySelectorAll('.truthteller-result-display').forEach(el => {
       el.style.display = 'none';
       el.innerHTML = '';
+      el.classList.remove('hidden');
     });
     
     // Clear the analyzed questions map
     state.analyzedQuestions.clear();
+    
+    // Clear any saved display preferences
+    try {
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith('truthteller-display-')) {
+          sessionStorage.removeItem(key);
+        }
+      }
+    } catch (e) {
+      console.warn('Unable to clear display preferences from session storage', e);
+    }
+  }
+
+  /**
+   * Toggle the visibility of analysis results
+   */
+  function toggleAnalysisDisplay(event, questionId) {
+    const button = event.target.closest('button');
+    const resultDisplay = document.getElementById(`truthteller-result-${questionId}`);
+    
+    if (!resultDisplay) return;
+    
+    // Check current visibility state
+    const isHidden = resultDisplay.classList.contains('hidden');
+    
+    if (isHidden) {
+      // Show the analysis
+      resultDisplay.classList.remove('hidden');
+      resultDisplay.style.display = 'block';
+      button.innerHTML = '[ hide ]';
+      button.classList.remove('hidden-state');
+    } else {
+      // Hide the analysis
+      resultDisplay.classList.add('hidden');
+      resultDisplay.style.display = 'none';
+      button.innerHTML = '[ show ]';
+      button.classList.add('hidden-state');
+    }
+    
+    // Store preference in session storage
+    try {
+      sessionStorage.setItem(`truthteller-display-${questionId}`, isHidden ? 'visible' : 'hidden');
+    } catch (e) {
+      console.warn('Unable to store display preference in session storage', e);
+    }
+  }
+
+  /**
+   * Handle keyboard shortcuts
+   */
+  function handleKeyboardShortcuts(event) {
+    // Alt+T to toggle all analysis results
+    if (event.altKey && event.key === 't') {
+      toggleAllAnalysisResults();
+    }
+  }
+
+  /**
+   * Toggle visibility of all analysis results at once
+   */
+  function toggleAllAnalysisResults() {
+    // Get all visible result displays
+    const allResults = document.querySelectorAll('.truthteller-result-display');
+    if (allResults.length === 0) return;
+    
+    // Check if any results are visible
+    const anyVisible = Array.from(allResults).some(el => 
+      el.style.display === 'block' && !el.classList.contains('hidden')
+    );
+    
+    // Toggle based on current state
+    allResults.forEach(result => {
+      const questionId = result.id.replace('truthteller-result-', '');
+      const toggleButton = document.querySelector(`button.truthteller-toggle-button[data-question-id="${questionId}"]`);
+      
+      if (anyVisible) {
+        // Hide all results
+        result.classList.add('hidden');
+        result.style.display = 'none';
+        
+        if (toggleButton) {
+          toggleButton.innerHTML = '[ show ]';
+          toggleButton.classList.add('hidden-state');
+        }
+      } else {
+        // Show all results
+        result.classList.remove('hidden');
+        result.style.display = 'block';
+        
+        if (toggleButton) {
+          toggleButton.innerHTML = '[ hide ]';
+          toggleButton.classList.remove('hidden-state');
+        }
+      }
+    });
+    
+    // Save preferences
+    try {
+      sessionStorage.setItem('truthteller-all-hidden', anyVisible ? 'true' : 'false');
+    } catch (e) {
+      console.warn('Unable to store display preference in session storage', e);
+    }
   }
 })(); 
