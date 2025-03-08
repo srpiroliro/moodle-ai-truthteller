@@ -33,25 +33,31 @@ const AVAILABLE_MODELS = [
     id: 'claude-3-5-sonnet',
     name: 'Claude 3.5 Sonnet',
     provider: 'claude',
-    apiId: 'claude-3-5-sonnet-20241022'
+    apiId: 'claude-3-5-sonnet-latest'
   },
   {
     id: 'claude-3-7-sonnet',
     name: 'Claude 3.7 Sonnet',
     provider: 'claude',
-    apiId: 'claude-3-7-sonnet-20250219'
+    apiId: 'claude-3-7-sonnet-latest'
   },
   {
     id: 'claude-3-haiku',
     name: 'Claude 3 Haiku',
     provider: 'claude',
-    apiId: 'claude-3-haiku-20240307'
+    apiId: 'claude-3.5-haiku-latest'
   },
   {
     id: 'grok-1',
     name: 'Grok 1',
     provider: 'grok',
     apiId: 'grok-1'
+  },
+  {
+    id: 'deepseek-coder',
+    name: 'DeepSeek Coder',
+    provider: 'deepseek',
+    apiId: 'deepseek-chat'
   }
 ];
 
@@ -214,6 +220,29 @@ async function callGrok(message, modelId, apiKey) {
   }
 }
 
+// DeepSeek API call function
+async function callDeepSeek(message, modelId, apiKey) {
+  // Get the proper API model ID
+  const apiModelId = getApiModelId(modelId);
+  
+  return makeApiCall(
+    'deepseek_api_call',
+    'https://api.deepseek.com/v1/chat/completions',
+    {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    {
+      model: apiModelId,
+      messages: [
+        { role: 'user', content: message }
+      ],
+      temperature: 0.7
+    },
+    (data) => data.choices[0].message.content
+  );
+}
+
 // Function to get the appropriate API call based on model
 function getApiCallFunction(modelId) {
   // Find the model in our list
@@ -231,6 +260,7 @@ function getApiCallFunction(modelId) {
       case 'openai': return callOpenAI;
       case 'claude': return callClaude;
       case 'grok': return callGrok;
+      case 'deepseek': return callDeepSeek;
       default: throw new Error(`Unknown provider: ${defaultModel.provider}`);
     }
   }
@@ -240,6 +270,7 @@ function getApiCallFunction(modelId) {
     case 'openai': return callOpenAI;
     case 'claude': return callClaude;
     case 'grok': return callGrok;
+    case 'deepseek': return callDeepSeek;
     default: throw new Error(`Unknown provider: ${model.provider}`);
   }
 }

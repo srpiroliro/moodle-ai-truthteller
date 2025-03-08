@@ -11,7 +11,8 @@
     apiKeys: {
       openai: null,
       claude: null,
-      grok: null
+      grok: null,
+      deepseek: null
     },
     preferredModel: 'claude-3-7-sonnet', // Set Claude 3.7 Sonnet as the default model
     analyzedQuestions: new Map(), // Map to store analysis results by question ID
@@ -43,7 +44,8 @@
         console.log('TruthTeller: API keys loaded', {
           openai: state.apiKeys.openai ? 'Set' : 'Not set',
           claude: state.apiKeys.claude ? 'Set' : 'Not set',
-          grok: state.apiKeys.grok ? 'Set' : 'Not set'
+          grok: state.apiKeys.grok ? 'Set' : 'Not set',
+          deepseek: state.apiKeys.deepseek ? 'Set' : 'Not set'
         });
       });
     }
@@ -68,11 +70,12 @@
     return new Promise((resolve) => {
       // Load API keys and model preferences from sync storage
       chrome.storage.sync.get(
-        ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel'],
+        ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'deepseekApiKey', 'selectedModel'],
         function(syncResult) {
           state.apiKeys.openai = syncResult.openaiApiKey || null;
           state.apiKeys.claude = syncResult.claudeApiKey || null;
           state.apiKeys.grok = syncResult.grokApiKey || null;
+          state.apiKeys.deepseek = syncResult.deepseekApiKey || null;
           
           // If a model is selected in storage, use it; otherwise use the default
           if (syncResult.selectedModel) {

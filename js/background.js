@@ -8,7 +8,8 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   // Handle different types of API requests
   if (request.type === 'openai_api_call' || 
       request.type === 'claude_api_call' || 
-      request.type === 'grok_api_call') {
+      request.type === 'grok_api_call' ||
+      request.type === 'deepseek_api_call') {
     
     // Make the API call
     makeApiRequest(request)

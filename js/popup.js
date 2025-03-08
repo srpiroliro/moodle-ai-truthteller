@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const openaiApiKeyInput = document.getElementById('openaiApiKey');
   const claudeApiKeyInput = document.getElementById('claudeApiKey');
   const grokApiKeyInput = document.getElementById('grokApiKey');
+  const deepseekApiKeyInput = document.getElementById('deepseekApiKey');
 
   // State variables
   let customContext = '';
@@ -575,11 +576,12 @@ document.addEventListener('DOMContentLoaded', function() {
   function loadSettings() {
     // Load API keys and model preferences from sync storage (smaller data)
     chrome.storage.sync.get(
-      ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel', 'defaultModel'], 
+      ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'deepseekApiKey', 'selectedModel', 'defaultModel'], 
       function(syncResult) {
         if (syncResult.openaiApiKey) openaiApiKeyInput.value = syncResult.openaiApiKey;
         if (syncResult.claudeApiKey) claudeApiKeyInput.value = syncResult.claudeApiKey;
         if (syncResult.grokApiKey) grokApiKeyInput.value = syncResult.grokApiKey;
+        if (syncResult.deepseekApiKey) deepseekApiKeyInput.value = syncResult.deepseekApiKey;
         
         // Set the selected model from storage
         if (syncResult.selectedModel) {
@@ -656,6 +658,7 @@ document.addEventListener('DOMContentLoaded', function() {
       openaiApiKey: openaiApiKeyInput.value.trim(),
       claudeApiKey: claudeApiKeyInput.value.trim(),
       grokApiKey: grokApiKeyInput.value.trim(),
+      deepseekApiKey: deepseekApiKeyInput.value.trim(),
       selectedModel: modelSelect.value,
       defaultModel: defaultModelSelect.value
     };
@@ -670,6 +673,7 @@ document.addEventListener('DOMContentLoaded', function() {
         openaiKey: settings.openaiApiKey ? 'Set' : 'Not set',
         claudeKey: settings.claudeApiKey ? 'Set' : 'Not set',
         grokKey: settings.grokApiKey ? 'Set' : 'Not set',
+        deepseekKey: settings.deepseekApiKey ? 'Set' : 'Not set',
         selectedModel: settings.selectedModel || 'Not set',
         defaultModel: settings.defaultModel || 'Not set'
       });
@@ -895,6 +899,8 @@ document.addEventListener('DOMContentLoaded', function() {
         return claudeApiKeyInput.value;
       case 'grok':
         return grokApiKeyInput.value;
+      case 'deepseek':
+        return deepseekApiKeyInput.value;
       default:
         return null;
     }

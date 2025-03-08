@@ -16,7 +16,8 @@
     "*://*/*",
     "https://api.openai.com/v1/*",
     "https://api.anthropic.com/v1/*",
-    "https://api.grok.ai/v1/*"
+    "https://api.grok.ai/v1/*",
+    "https://api.deepseek.com/v1/*"
   ],
   "content_scripts": [
     {
