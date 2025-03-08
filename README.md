@@ -2,6 +2,8 @@
 
 A browser extension that provides a chat interface to interact with various Large Language Models (LLMs) including OpenAI's GPT, Anthropic's Claude, and x.ai's Grok using your own API keys. It also includes a Moodle quiz helper that suggests the most probable correct answers for quiz questions.
 
+![TruthTeller Custom Context Feature](assets/extension-context.png)
+
 ## Features
 
 - Clean and intuitive chat interface
@@ -9,10 +11,15 @@ A browser extension that provides a chat interface to interact with various Larg
   - OpenAI (GPT-3.5 Turbo, GPT-4)
   - Anthropic (Claude 3 Opus, Claude 3 Sonnet, Claude 3 Haiku)
   - x.ai (Grok)
+- Custom context upload:
+  - Upload PDF presentations to provide context for your questions
+  - Paste text directly as context
 - Secure API key management (keys are stored in your browser's secure storage)
 - Easy switching between different models
 - Responsive design
 - **Moodle Quiz Helper** - Analyze quiz questions and suggest probable correct answers
+
+![TruthTeller Quiz Analysis Feature](assets/question-analyze.png)
 
 ## Installation
 
@@ -35,8 +42,17 @@ A browser extension that provides a chat interface to interact with various Larg
 2. Click the settings icon (⚙️) to open the settings panel
 3. Enter your API keys for the LLM providers you want to use
 4. Select the LLM model you want to chat with from the dropdown
-5. Type your message and press Enter or click the send button
-6. Enjoy chatting with your chosen LLM!
+5. Optionally, upload a PDF or paste text to use as context
+6. Type your message and press Enter or click the send button
+7. Enjoy chatting with your chosen LLM!
+
+### Custom Context
+
+1. In the TruthTeller chat interface, locate the "Custom Context" section
+2. Upload PDF presentations by clicking the "Choose File" button
+3. Or paste text directly into the text area
+4. Toggle "Use custom context" to enable/disable using this information
+5. Your questions will now be answered with reference to the provided context
 
 ### Moodle Quiz Helper
 
@@ -73,8 +89,12 @@ Your API keys and chat history are stored locally in your browser's secure stora
 - `css/style.css`: Styling for the popup
 - `css/content.css`: Styling for the Moodle quiz helper
 - `js/popup.js`: JavaScript for handling UI and API interactions in the popup
+- `js/models.js`: Definitions and configurations for supported LLM models
 - `js/content.js`: Content script for detecting and analyzing Moodle quiz questions
+- `js/background.js`: Background service worker for handling extension events
+- `js/lib/`: Third-party libraries and utilities
 - `icons/`: Extension icons
+- `assets/`: Screenshots and other media files
 
 ### Future Improvements
 
@@ -85,6 +105,7 @@ Your API keys and chat history are stored locally in your browser's secure stora
 - Implement conversation context/memory
 - Improve question detection for different Moodle themes and question types
 - Add support for more learning management systems (LMS) beyond Moodle
+- Enhance PDF parsing capabilities for better context extraction
 
 ## Legal Considerations
 
