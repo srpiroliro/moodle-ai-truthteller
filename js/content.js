@@ -189,8 +189,11 @@
     
     const questionId = event.target.dataset.questionId || questionElement.id;
     
+    console.log('TruthTeller: Analyze button clicked for question', questionId);
+    
     // Prevent analyzing if already in progress
     if (state.isAnalyzing.get(questionId)) {
+      console.log('TruthTeller: Analysis already in progress for question', questionId);
       return;
     }
     
@@ -212,6 +215,13 @@
     
     // Get the API key based on the model's provider
     const apiKey = state.apiKeys[selectedModel.provider];
+    
+    console.log('TruthTeller: Selected model and API key', {
+      modelId: selectedModel.id,
+      modelName: selectedModel.name,
+      provider: selectedModel.provider,
+      apiKeyAvailable: apiKey ? 'Yes' : 'No'
+    });
     
     // Validate API key
     if (!apiKey) {
@@ -236,9 +246,23 @@
       // Extract question data
       const questionData = extractQuestionData(questionElement);
       
-      // Check if we got any options
-      if (questionData.options.length === 0) {
-        console.warn('No options found for question', questionId);
+      // Check if the question has valid content to analyze
+      const isWrittenQuestion = questionData.type === 'essay' || questionData.type === 'short-answer';
+      const hasOptions = questionData.options.length > 0;
+      const hasQuestionText = questionData.text && questionData.text.trim().length > 0;
+      
+      if (!hasQuestionText) {
+        console.warn('TruthTeller: No question text found', questionId);
+        alert('Unable to find question text. Please try a different question.');
+        state.isAnalyzing.set(questionId, false);
+        analyzeButton.textContent = originalText;
+        return;
+      }
+      
+      // For multiple choice, we need options
+      // For written questions, we don't need options
+      if (!isWrittenQuestion && !hasOptions) {
+        console.warn('TruthTeller: No options found for multiple-choice question', questionId);
         alert('Unable to find answer options for this question. Please try a different question.');
         state.isAnalyzing.set(questionId, false);
         analyzeButton.textContent = originalText;
@@ -250,7 +274,8 @@
         id: questionId,
         text: questionData.text,
         type: questionData.type,
-        optionsCount: questionData.options.length
+        optionsCount: questionData.options.length,
+        isWrittenQuestion: isWrittenQuestion
       });
       
       // Analyze question with LLM
@@ -261,7 +286,9 @@
       state.analyzedQuestions.set(questionId, analysis);
       
       // Mark probable answers
-      markProbableAnswers(questionElement, analysis);
+      if (!isWrittenQuestion) {
+        markProbableAnswers(questionElement, analysis);
+      }
       
       // Display result in the UI
       displayAnalysisResult(questionId, analysis);
@@ -298,66 +325,213 @@
       resultContent.appendChild(warningBanner);
     }
     
-    // Add the probable answer(s)
-    const answerHeading = document.createElement('h4');
-    answerHeading.textContent = 'Most Probable Answer:';
-    resultContent.appendChild(answerHeading);
+    // Get the question type from the element
+    const questionElement = document.getElementById(questionId);
+    const questionData = questionElement ? extractQuestionData(questionElement) : { type: 'unknown' };
     
-    // Create answer display
-    const answerDisplay = document.createElement('div');
-    answerDisplay.className = `truthteller-answer truthteller-${analysis.confidence.toLowerCase()}-confidence`;
-    
-    if (analysis.probableAnswers.length > 0) {
-      // Construct answer text
-      const options = [];
-      analysis.probableAnswers.forEach(index => {
-        // Try multiple ways to find the option text
-        const questionElem = document.getElementById(questionId);
-        let optionText = `Option ${index + 1}`;
-        
-        // Try various selectors to find the option text
-        const selectors = [
-          `.answer div.r:nth-child(${index + 1}) label`,
-          `.answer label:nth-of-type(${index + 1})`,
-          `.answernumber:nth-of-type(${index + 1}) + div`,
-          `.answer div:nth-of-type(${index + 1})`,
-          `.ablock .answer div:nth-of-type(${index + 1})`
-        ];
-        
-        // Try each selector
-        for (const selector of selectors) {
-          const optionElem = questionElem.querySelector(selector);
-          if (optionElem) {
-            const text = optionElem.textContent.trim();
-            if (text) {
-              // Clean up the text (remove letter prefixes like "a. ")
-              optionText = text.replace(/^\s*[a-z]\.\s+/i, '');
-              break;
+    // For multiple choice questions
+    if (questionData.type === 'single-choice' || questionData.type === 'multiple-choice' || questionData.type === 'true-false') {
+      // Add the probable answer(s)
+      const answerHeading = document.createElement('h4');
+      answerHeading.textContent = 'Most Probable Answer:';
+      resultContent.appendChild(answerHeading);
+      
+      // Create answer display
+      const answerDisplay = document.createElement('div');
+      answerDisplay.className = `truthteller-answer truthteller-${analysis.confidence.toLowerCase()}-confidence`;
+      
+      if (analysis.probableAnswers.length > 0) {
+        // Construct answer text
+        const options = [];
+        analysis.probableAnswers.forEach(index => {
+          // Try multiple ways to find the option text
+          const questionElem = document.getElementById(questionId);
+          let optionText = `Option ${index + 1}`;
+          
+          // Try various selectors to find the option text
+          const selectors = [
+            `.answer div.r:nth-child(${index + 1}) label`,
+            `.answer label:nth-of-type(${index + 1})`,
+            `.answernumber:nth-of-type(${index + 1}) + div`,
+            `.answer div:nth-of-type(${index + 1})`,
+            `.ablock .answer div:nth-of-type(${index + 1})`
+          ];
+          
+          // Try each selector
+          for (const selector of selectors) {
+            const optionElem = questionElem.querySelector(selector);
+            if (optionElem) {
+              const text = optionElem.textContent.trim();
+              if (text) {
+                // Clean up the text (remove letter prefixes like "a. ")
+                optionText = text.replace(/^\s*[a-z]\.\s+/i, '');
+                break;
+              }
             }
           }
-        }
+          
+          options.push(optionText);
+        });
         
-        options.push(optionText);
-      });
+        answerDisplay.textContent = options.join(', ');
+      } else {
+        answerDisplay.textContent = 'No clear answer identified';
+      }
       
-      answerDisplay.textContent = options.join(', ');
-    } else {
-      answerDisplay.textContent = 'No clear answer identified';
+      resultContent.appendChild(answerDisplay);
+    }
+    // For essay questions
+    else if (questionData.type === 'essay') {
+      // Add heading
+      const essayHeading = document.createElement('h4');
+      essayHeading.textContent = 'Essay Approach:';
+      resultContent.appendChild(essayHeading);
+      
+      // Add key points
+      if (analysis.keyPoints && analysis.keyPoints.length > 0) {
+        const keyPointsContainer = document.createElement('div');
+        keyPointsContainer.className = 'truthteller-key-points';
+        
+        const keyPointsHeading = document.createElement('div');
+        keyPointsHeading.className = 'truthteller-subheading';
+        keyPointsHeading.textContent = 'Key Points:';
+        keyPointsContainer.appendChild(keyPointsHeading);
+        
+        const keyPointsList = document.createElement('ul');
+        keyPointsList.className = 'truthteller-points-list';
+        
+        analysis.keyPoints.forEach(point => {
+          const listItem = document.createElement('li');
+          listItem.textContent = point;
+          keyPointsList.appendChild(listItem);
+        });
+        
+        keyPointsContainer.appendChild(keyPointsList);
+        resultContent.appendChild(keyPointsContainer);
+      }
+      
+      // Add structure
+      if (analysis.structure) {
+        const structureContainer = document.createElement('div');
+        structureContainer.className = 'truthteller-structure';
+        
+        const structureHeading = document.createElement('div');
+        structureHeading.className = 'truthteller-subheading';
+        structureHeading.textContent = 'Structure:';
+        structureContainer.appendChild(structureHeading);
+        
+        const structureText = document.createElement('div');
+        structureText.className = 'truthteller-structure-text';
+        structureText.textContent = analysis.structure;
+        structureContainer.appendChild(structureText);
+        
+        resultContent.appendChild(structureContainer);
+      }
+      
+      // Add concepts
+      if (analysis.conceptsToInclude && analysis.conceptsToInclude.length > 0) {
+        const conceptsContainer = document.createElement('div');
+        conceptsContainer.className = 'truthteller-concepts';
+        
+        const conceptsHeading = document.createElement('div');
+        conceptsHeading.className = 'truthteller-subheading';
+        conceptsHeading.textContent = 'Key Concepts:';
+        conceptsContainer.appendChild(conceptsHeading);
+        
+        const conceptsList = document.createElement('div');
+        conceptsList.className = 'truthteller-concepts-list';
+        conceptsList.textContent = analysis.conceptsToInclude.join(', ');
+        conceptsContainer.appendChild(conceptsList);
+        
+        resultContent.appendChild(conceptsContainer);
+      }
+    }
+    // For short answer questions
+    else if (questionData.type === 'short-answer') {
+      // Add heading
+      const answerHeading = document.createElement('h4');
+      answerHeading.textContent = 'Suggested Answer:';
+      resultContent.appendChild(answerHeading);
+      
+      // Add model answer
+      if (analysis.modelAnswer) {
+        const answerDisplay = document.createElement('div');
+        answerDisplay.className = `truthteller-answer truthteller-${analysis.confidence.toLowerCase()}-confidence`;
+        answerDisplay.textContent = analysis.modelAnswer;
+        resultContent.appendChild(answerDisplay);
+      }
+      
+      // Add key terms
+      if (analysis.conceptsToInclude && analysis.conceptsToInclude.length > 0) {
+        const termsContainer = document.createElement('div');
+        termsContainer.className = 'truthteller-key-terms';
+        
+        const termsHeading = document.createElement('div');
+        termsHeading.className = 'truthteller-subheading';
+        termsHeading.textContent = 'Key Terms:';
+        termsContainer.appendChild(termsHeading);
+        
+        const termsList = document.createElement('div');
+        termsList.className = 'truthteller-terms-list';
+        termsList.textContent = analysis.conceptsToInclude.join(', ');
+        termsContainer.appendChild(termsList);
+        
+        resultContent.appendChild(termsContainer);
+      }
+    }
+    // For other question types
+    else {
+      // Default display for unknown question types
+      // Add the approach heading
+      const approachHeading = document.createElement('h4');
+      approachHeading.textContent = 'Suggested Approach:';
+      resultContent.appendChild(approachHeading);
+      
+      // Add approach text
+      if (analysis.approach) {
+        const approachDisplay = document.createElement('div');
+        approachDisplay.className = 'truthteller-approach';
+        approachDisplay.textContent = analysis.approach;
+        resultContent.appendChild(approachDisplay);
+      }
+      
+      // Add key points
+      if (analysis.keyPoints && analysis.keyPoints.length > 0) {
+        const keyPointsContainer = document.createElement('div');
+        keyPointsContainer.className = 'truthteller-key-points';
+        
+        const keyPointsHeading = document.createElement('div');
+        keyPointsHeading.className = 'truthteller-subheading';
+        keyPointsHeading.textContent = 'Key Points:';
+        keyPointsContainer.appendChild(keyPointsHeading);
+        
+        const keyPointsList = document.createElement('ul');
+        keyPointsList.className = 'truthteller-points-list';
+        
+        analysis.keyPoints.forEach(point => {
+          const listItem = document.createElement('li');
+          listItem.textContent = point;
+          keyPointsList.appendChild(listItem);
+        });
+        
+        keyPointsContainer.appendChild(keyPointsList);
+        resultContent.appendChild(keyPointsContainer);
+      }
     }
     
-    resultContent.appendChild(answerDisplay);
-    
-    // Add confidence level
+    // Add confidence level for all question types
     const confidenceDisplay = document.createElement('div');
     confidenceDisplay.className = 'truthteller-confidence';
     confidenceDisplay.textContent = `Confidence: ${analysis.confidence}`;
     resultContent.appendChild(confidenceDisplay);
     
-    // Add justification
-    const justificationDisplay = document.createElement('div');
-    justificationDisplay.className = 'truthteller-justification';
-    justificationDisplay.textContent = `Justification: ${analysis.justification}`;
-    resultContent.appendChild(justificationDisplay);
+    // Add justification for all question types
+    if (analysis.justification && analysis.justification !== analysis.modelAnswer) {
+      const justificationDisplay = document.createElement('div');
+      justificationDisplay.className = 'truthteller-justification';
+      justificationDisplay.textContent = `Justification: ${analysis.justification}`;
+      resultContent.appendChild(justificationDisplay);
+    }
     
     // Add to result display
     resultDisplay.appendChild(resultContent);
@@ -579,6 +753,25 @@
       }
     }
     
+    // Look for any additional instructions or context
+    let additionalContext = '';
+    const contextSelectors = [
+      '.info', 
+      '.general', 
+      '.specificfeedback',
+      '.prompt',
+      '.instruction',
+      '.help',
+      '.guidance'
+    ];
+    
+    for (const selector of contextSelectors) {
+      const contextEl = questionElement.querySelector(selector);
+      if (contextEl && contextEl.textContent.trim()) {
+        additionalContext += contextEl.textContent.trim() + '\n';
+      }
+    }
+    
     // Get question type
     let questionType = 'unknown';
     
@@ -599,12 +792,21 @@
     } else if (questionElement.classList.contains('essay') || 
                questionElement.querySelector('textarea')) {
       questionType = 'essay';
+    } else if (questionElement.classList.contains('shortanswer') || 
+               questionElement.querySelector('input[type="text"]')) {
+      questionType = 'short-answer';
     } else if (questionElement.querySelectorAll('input[type="radio"]').length > 0) {
       // If we have radio buttons but no specific class, assume single choice
       questionType = 'single-choice';
     } else if (questionElement.querySelectorAll('input[type="checkbox"]').length > 0) {
       // If we have checkboxes but no specific class, assume multiple choice
       questionType = 'multiple-choice';
+    } else if (questionElement.querySelector('textarea')) {
+      // If there's a textarea, it's likely an essay question
+      questionType = 'essay';
+    } else if (questionElement.querySelector('input[type="text"]')) {
+      // If there's a text input, it's likely a short answer question
+      questionType = 'short-answer';
     }
     
     // Get answer options
@@ -705,12 +907,65 @@
       });
     }
     
+    // For essay or short-answer questions, look for hints, word limits, or example answers
+    let answerHints = '';
+    
+    if (questionType === 'essay' || questionType === 'short-answer') {
+      // Try to find word count or character limits
+      const limitSelectors = [
+        '.wordcount', 
+        '.charactercount',
+        '.limit',
+        'div[id*="word_count"]',
+        'span[id*="word_count"]',
+        'div[id*="character_count"]',
+        'span[id*="character_count"]'
+      ];
+      
+      for (const selector of limitSelectors) {
+        const limitEl = questionElement.querySelector(selector);
+        if (limitEl && limitEl.textContent.trim()) {
+          answerHints += "Word/character limit: " + limitEl.textContent.trim() + "\n";
+        }
+      }
+      
+      // Try to find any hints or instructions
+      const hintSelectors = [
+        '.hint',
+        '.instruction',
+        '.note',
+        '.answerformat',
+        '.guidelines'
+      ];
+      
+      for (const selector of hintSelectors) {
+        const hintEl = questionElement.querySelector(selector);
+        if (hintEl && hintEl.textContent.trim()) {
+          answerHints += "Hint: " + hintEl.textContent.trim() + "\n";
+        }
+      }
+      
+      // Check for a placeholder in the textarea
+      const textarea = questionElement.querySelector('textarea');
+      if (textarea && textarea.placeholder) {
+        answerHints += "Placeholder: " + textarea.placeholder + "\n";
+      }
+      
+      // Check for any info about acceptable formats
+      const formatInfo = questionElement.querySelector('.filemanager, .formats, .attachments');
+      if (formatInfo && formatInfo.textContent.trim()) {
+        answerHints += "Format info: " + formatInfo.textContent.trim() + "\n";
+      }
+    }
+    
     return {
       id,
       element: questionElement,
       text: questionText,
       type: questionType,
-      options
+      options,
+      additionalContext: additionalContext.trim(),
+      answerHints: answerHints.trim()
     };
   }
 
@@ -780,20 +1035,28 @@ JUSTIFICATION: This is a mock response generated when the API call failed. The e
    * Construct a prompt for analyzing a question
    */
   function constructQuestionPrompt(questionData) {
-    let prompt = `You are an AI that helps students analyze quiz questions. For the following question, identify the most probable correct answer(s) with your confidence level. DO NOT explain the full reasoning process, just provide your answer analysis.
+    let prompt = '';
+    
+    // For multiple choice questions
+    if (questionData.type === 'single-choice' || questionData.type === 'multiple-choice' || questionData.type === 'true-false') {
+      prompt = `You are an AI that helps students analyze quiz questions. For the following question, identify the most probable correct answer(s) with your confidence level. DO NOT explain the full reasoning process, just provide your answer analysis.
 
 Question: ${questionData.text}
 
 `;
 
-    if (questionData.options.length > 0) {
-      prompt += 'Options:\n';
-      questionData.options.forEach((option, index) => {
-        prompt += `${index + 1}. ${option.text}\n`;
-      });
-    }
+      if (questionData.additionalContext) {
+        prompt += `Additional context: ${questionData.additionalContext}\n\n`;
+      }
 
-    prompt += `
+      if (questionData.options.length > 0) {
+        prompt += 'Options:\n';
+        questionData.options.forEach((option, index) => {
+          prompt += `${index + 1}. ${option.text}\n`;
+        });
+      }
+
+      prompt += `
 Question Type: ${questionData.type}
 
 Your task:
@@ -808,6 +1071,96 @@ CONFIDENCE: HIGH/MEDIUM/LOW
 JUSTIFICATION: Brief justification
 
 Response:`;
+    }
+    // For essay questions
+    else if (questionData.type === 'essay') {
+      prompt = `You are an AI that helps students understand how to approach essay questions. For the following essay question, provide a brief outline of how to answer it effectively. DO NOT write a full essay response.
+
+Essay Question: ${questionData.text}
+
+`;
+
+      if (questionData.additionalContext) {
+        prompt += `Additional context: ${questionData.additionalContext}\n\n`;
+      }
+
+      if (questionData.answerHints) {
+        prompt += `Answer guidelines: ${questionData.answerHints}\n\n`;
+      }
+
+      prompt += `
+Your task:
+1. Analyze the essay question carefully.
+2. Identify 3-5 key points that should be addressed in an answer.
+3. Suggest a clear structure for the essay response.
+4. Mention any key terms, concepts, or references that should be included.
+
+Format your response as follows:
+KEY POINTS: List the 3-5 main points that should be addressed
+STRUCTURE: Suggest a brief outline structure (intro, body paragraphs, conclusion)
+IMPORTANT CONCEPTS: Mention any key terms or concepts to include
+APPROACH: Give a BRIEF suggestion on how to approach this essay (1-2 sentences)
+
+Response:`;
+    }
+    // For short answer questions
+    else if (questionData.type === 'short-answer') {
+      prompt = `You are an AI that helps students analyze short answer questions. For the following question, provide a concise model answer. Keep it brief but complete.
+
+Question: ${questionData.text}
+
+`;
+
+      if (questionData.additionalContext) {
+        prompt += `Additional context: ${questionData.additionalContext}\n\n`;
+      }
+
+      if (questionData.answerHints) {
+        prompt += `Answer guidelines: ${questionData.answerHints}\n\n`;
+      }
+
+      prompt += `
+Your task:
+1. Analyze the question carefully.
+2. Provide a concise, accurate answer that directly addresses the question.
+3. Keep your answer brief but include all necessary information.
+4. Use clear, precise language.
+
+Format your response as follows:
+ANSWER: Your concise model answer
+CONFIDENCE: HIGH/MEDIUM/LOW (how confident you are in this answer)
+KEY TERMS: List any key terms or concepts that should be included in the answer
+
+Response:`;
+    }
+    // For other question types or unknown types
+    else {
+      prompt = `You are an AI that helps students analyze quiz questions. For the following question, provide guidance on how to approach it.
+
+Question: ${questionData.text}
+
+`;
+
+      if (questionData.additionalContext) {
+        prompt += `Additional context: ${questionData.additionalContext}\n\n`;
+      }
+
+      prompt += `
+Question Type: ${questionData.type || 'Unknown'}
+
+Your task:
+1. Analyze the question carefully.
+2. Explain how to approach answering this type of question.
+3. Provide key information that would be relevant to include in an answer.
+
+Format your response as follows:
+APPROACH: Brief explanation of how to tackle this question
+KEY POINTS: List essential information to include
+CONFIDENCE: HIGH/MEDIUM/LOW
+JUSTIFICATION: Brief explanation of your confidence level
+
+Response:`;
+    }
 
     return prompt;
   }
@@ -821,51 +1174,173 @@ Response:`;
       questionId: questionData.id,
       probableAnswers: [],
       confidence: 'LOW',
-      justification: ''
+      justification: '',
+      keyPoints: [],
+      structure: '',
+      conceptsToInclude: [],
+      approach: '',
+      modelAnswer: ''
     };
     
     try {
-      // Extract answer, confidence, and justification using regex
-      const answerMatch = response.match(/ANSWER:\s*(.*)/i);
-      const confidenceMatch = response.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
-      const justificationMatch = response.match(/JUSTIFICATION:\s*(.*)/i);
-      
-      if (answerMatch && answerMatch[1]) {
-        const answerText = answerMatch[1].trim();
+      // For multiple choice questions
+      if (questionData.type === 'single-choice' || questionData.type === 'multiple-choice' || questionData.type === 'true-false') {
+        // Extract answer, confidence, and justification using regex
+        const answerMatch = response.match(/ANSWER:\s*(.*)/i);
+        const confidenceMatch = response.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
+        const justificationMatch = response.match(/JUSTIFICATION:\s*(.*)/i);
         
-        // Handle multiple answers (comma-separated)
-        if (answerText.includes(',')) {
-          // Split by comma and handle "Option #" format
-          const answerParts = answerText.split(',').map(part => part.trim());
+        if (answerMatch && answerMatch[1]) {
+          const answerText = answerMatch[1].trim();
           
-          answerParts.forEach(part => {
-            // Extract answer number
-            const numMatch = part.match(/\d+/);
+          // Handle multiple answers (comma-separated)
+          if (answerText.includes(',')) {
+            // Split by comma and handle "Option #" format
+            const answerParts = answerText.split(',').map(part => part.trim());
+            
+            answerParts.forEach(part => {
+              // Extract answer number
+              const numMatch = part.match(/\d+/);
+              if (numMatch) {
+                const num = parseInt(numMatch[0]);
+                if (num > 0 && num <= questionData.options.length) {
+                  analysis.probableAnswers.push(num - 1); // Convert to 0-based index
+                }
+              }
+            });
+          } else {
+            // Handle single answer
+            const numMatch = answerText.match(/\d+/);
             if (numMatch) {
               const num = parseInt(numMatch[0]);
               if (num > 0 && num <= questionData.options.length) {
                 analysis.probableAnswers.push(num - 1); // Convert to 0-based index
               }
             }
-          });
-        } else {
-          // Handle single answer
-          const numMatch = answerText.match(/\d+/);
-          if (numMatch) {
-            const num = parseInt(numMatch[0]);
-            if (num > 0 && num <= questionData.options.length) {
-              analysis.probableAnswers.push(num - 1); // Convert to 0-based index
-            }
           }
         }
+        
+        if (confidenceMatch && confidenceMatch[1]) {
+          analysis.confidence = confidenceMatch[1].toUpperCase();
+        }
+        
+        if (justificationMatch && justificationMatch[1]) {
+          analysis.justification = justificationMatch[1].trim();
+        }
       }
-      
-      if (confidenceMatch && confidenceMatch[1]) {
-        analysis.confidence = confidenceMatch[1].toUpperCase();
+      // For essay questions
+      else if (questionData.type === 'essay') {
+        // Extract key points, structure, concepts, and approach
+        const keyPointsMatch = response.match(/KEY POINTS:\s*([\s\S]*?)(?=STRUCTURE:|IMPORTANT CONCEPTS:|APPROACH:|$)/i);
+        const structureMatch = response.match(/STRUCTURE:\s*([\s\S]*?)(?=KEY POINTS:|IMPORTANT CONCEPTS:|APPROACH:|$)/i);
+        const conceptsMatch = response.match(/IMPORTANT CONCEPTS:\s*([\s\S]*?)(?=KEY POINTS:|STRUCTURE:|APPROACH:|$)/i);
+        const approachMatch = response.match(/APPROACH:\s*([\s\S]*?)(?=KEY POINTS:|STRUCTURE:|IMPORTANT CONCEPTS:|$)/i);
+        
+        // Process and store key points
+        if (keyPointsMatch && keyPointsMatch[1]) {
+          const keyPointsText = keyPointsMatch[1].trim();
+          // Split by bullet points, numbers, or new lines
+          analysis.keyPoints = keyPointsText
+            .split(/\n|•|\*|\d+\.\s+/)
+            .map(point => point.trim())
+            .filter(point => point.length > 0);
+        }
+        
+        // Store structure
+        if (structureMatch && structureMatch[1]) {
+          analysis.structure = structureMatch[1].trim();
+        }
+        
+        // Process and store concepts
+        if (conceptsMatch && conceptsMatch[1]) {
+          const conceptsText = conceptsMatch[1].trim();
+          // Split by bullet points, numbers, or new lines
+          analysis.conceptsToInclude = conceptsText
+            .split(/\n|•|\*|\d+\.\s+/)
+            .map(concept => concept.trim())
+            .filter(concept => concept.length > 0);
+        }
+        
+        // Store approach
+        if (approachMatch && approachMatch[1]) {
+          analysis.approach = approachMatch[1].trim();
+        }
+        
+        // Set confidence based on content quality
+        if (analysis.keyPoints.length > 3 && analysis.structure && analysis.conceptsToInclude.length > 0) {
+          analysis.confidence = 'HIGH';
+        } else if (analysis.keyPoints.length > 1) {
+          analysis.confidence = 'MEDIUM';
+        }
+        
+        // Create justification from approach
+        analysis.justification = analysis.approach || 'Follow the structure and include the key points listed.';
       }
-      
-      if (justificationMatch && justificationMatch[1]) {
-        analysis.justification = justificationMatch[1].trim();
+      // For short answer questions
+      else if (questionData.type === 'short-answer') {
+        // Extract answer, confidence, and key terms
+        const answerMatch = response.match(/ANSWER:\s*([\s\S]*?)(?=CONFIDENCE:|KEY TERMS:|$)/i);
+        const confidenceMatch = response.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
+        const keyTermsMatch = response.match(/KEY TERMS:\s*([\s\S]*?)(?=ANSWER:|CONFIDENCE:|$)/i);
+        
+        // Store model answer
+        if (answerMatch && answerMatch[1]) {
+          analysis.modelAnswer = answerMatch[1].trim();
+        }
+        
+        // Store confidence
+        if (confidenceMatch && confidenceMatch[1]) {
+          analysis.confidence = confidenceMatch[1].toUpperCase();
+        }
+        
+        // Process and store key terms
+        if (keyTermsMatch && keyTermsMatch[1]) {
+          const keyTermsText = keyTermsMatch[1].trim();
+          // Split by bullet points, numbers, or new lines
+          analysis.conceptsToInclude = keyTermsText
+            .split(/\n|•|\*|\d+\.\s+|,/)
+            .map(term => term.trim())
+            .filter(term => term.length > 0);
+        }
+        
+        // Use model answer as justification
+        analysis.justification = analysis.modelAnswer;
+      }
+      // For other question types
+      else {
+        // Extract approach, key points, confidence, and justification
+        const approachMatch = response.match(/APPROACH:\s*([\s\S]*?)(?=KEY POINTS:|CONFIDENCE:|JUSTIFICATION:|$)/i);
+        const keyPointsMatch = response.match(/KEY POINTS:\s*([\s\S]*?)(?=APPROACH:|CONFIDENCE:|JUSTIFICATION:|$)/i);
+        const confidenceMatch = response.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
+        const justificationMatch = response.match(/JUSTIFICATION:\s*([\s\S]*?)(?=APPROACH:|KEY POINTS:|CONFIDENCE:|$)/i);
+        
+        // Store approach
+        if (approachMatch && approachMatch[1]) {
+          analysis.approach = approachMatch[1].trim();
+        }
+        
+        // Process and store key points
+        if (keyPointsMatch && keyPointsMatch[1]) {
+          const keyPointsText = keyPointsMatch[1].trim();
+          // Split by bullet points, numbers, or new lines
+          analysis.keyPoints = keyPointsText
+            .split(/\n|•|\*|\d+\.\s+/)
+            .map(point => point.trim())
+            .filter(point => point.length > 0);
+        }
+        
+        // Store confidence
+        if (confidenceMatch && confidenceMatch[1]) {
+          analysis.confidence = confidenceMatch[1].toUpperCase();
+        }
+        
+        // Store justification
+        if (justificationMatch && justificationMatch[1]) {
+          analysis.justification = justificationMatch[1].trim();
+        } else if (analysis.approach) {
+          // Use approach as fallback justification
+          analysis.justification = analysis.approach;
+        }
       }
     } catch (error) {
       console.error('Error parsing LLM response:', error);

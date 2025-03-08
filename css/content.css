@@ -260,4 +260,63 @@
   text-align: center;
   margin-top: 2px;
   opacity: 0.7;
+}
+
+.truthteller-subheading {
+  font-weight: normal;
+  color: #777;
+  font-size: 10px;
+  margin-bottom: 2px;
+}
+
+.truthteller-key-points {
+  margin-bottom: 4px;
+}
+
+.truthteller-points-list {
+  margin: 0;
+  padding-left: 15px;
+  font-size: 10px;
+  color: #555;
+}
+
+.truthteller-points-list li {
+  margin-bottom: 2px;
+}
+
+.truthteller-structure {
+  margin-bottom: 4px;
+}
+
+.truthteller-structure-text {
+  font-size: 10px;
+  color: #555;
+  font-style: italic;
+}
+
+.truthteller-concepts {
+  margin-bottom: 4px;
+}
+
+.truthteller-concepts-list {
+  font-size: 10px;
+  color: #555;
+  font-style: italic;
+}
+
+.truthteller-approach {
+  font-size: 10px;
+  color: #555;
+  margin-bottom: 4px;
+  font-style: italic;
+}
+
+.truthteller-key-terms {
+  margin-bottom: 4px;
+}
+
+.truthteller-terms-list {
+  font-size: 10px;
+  color: #555;
+  font-style: italic;
 } 
