@@ -4,31 +4,31 @@
  */
 
 // Hardcoded default model to use as fallback
-const FALLBACK_DEFAULT_MODEL_ID = 'claude-3-7-sonnet';
+const FALLBACK_DEFAULT_MODEL_ID = 'claude-3-5-haiku';
 
 // Current default model ID (to be updated from chrome.storage)
 let currentDefaultModelId = FALLBACK_DEFAULT_MODEL_ID;
 
 // List of available models with their proper API identifiers
 const AVAILABLE_MODELS = [
-  {
-    id: 'gpt-4',           // Internal ID used for selection and storage
-    name: 'OpenAI GPT-4',  // Display name 
-    provider: 'openai',    // Provider name for API key lookup
-    apiId: 'gpt-4'         // Actual model ID to send to the API
-  },
-  {
-    id: 'gpt-3.5-turbo',
-    name: 'OpenAI GPT-3.5 Turbo',
-    provider: 'openai',
-    apiId: 'gpt-3.5-turbo'
-  },
-  {
-    id: 'claude-3-opus',
-    name: 'Claude 3 Opus',
-    provider: 'claude',
-    apiId: 'claude-3-opus-20240229'
-  },
+  // {
+  //   id: 'gpt-4',           // Internal ID used for selection and storage
+  //   name: 'OpenAI GPT-4',  // Display name 
+  //   provider: 'openai',    // Provider name for API key lookup
+  //   apiId: 'gpt-4'         // Actual model ID to send to the API
+  // },
+  // {
+  //   id: 'gpt-3.5-turbo',
+  //   name: 'OpenAI GPT-3.5 Turbo',
+  //   provider: 'openai',
+  //   apiId: 'gpt-3.5-turbo'
+  // },
+  // {
+  //   id: 'claude-3-opus',
+  //   name: 'Claude 3 Opus',
+  //   provider: 'claude',
+  //   apiId: 'claude-3-opus-20240229'
+  // },
   {
     id: 'claude-3-5-sonnet',
     name: 'Claude 3.5 Sonnet',
@@ -42,20 +42,20 @@ const AVAILABLE_MODELS = [
     apiId: 'claude-3-7-sonnet-latest'
   },
   {
-    id: 'claude-3-haiku',
-    name: 'Claude 3 Haiku',
+    id: 'claude-3-5-haiku',
+    name: 'Claude 3.5 Haiku',
     provider: 'claude',
-    apiId: 'claude-3.5-haiku-latest'
+    apiId: 'claude-3-5-haiku-latest'
   },
+  // {
+  //   id: 'grok-1',
+  //   name: 'Grok 1',
+  //   provider: 'grok',
+  //   apiId: 'grok-1'
+  // },
   {
-    id: 'grok-1',
-    name: 'Grok 1',
-    provider: 'grok',
-    apiId: 'grok-1'
-  },
-  {
-    id: 'deepseek-coder',
-    name: 'DeepSeek Coder',
+    id: 'deepseek-chat',
+    name: 'DeepSeek Chat',
     provider: 'deepseek',
     apiId: 'deepseek-chat'
   }
