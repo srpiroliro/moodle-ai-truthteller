@@ -170,8 +170,6 @@ body {
 }
 
 .save-button {
-  display: block;
-  margin-top: 15px;
   padding: 8px 15px;
   background-color: #4f46e5;
   color: white;
@@ -179,7 +177,12 @@ body {
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
-  width: 100%;
+  flex: 1;
+  transition: background-color 0.2s;
+}
+
+.save-button:hover {
+  background-color: #4338ca;
 }
 
 .typing-indicator {
@@ -351,4 +354,170 @@ body {
 
 .context-indicator.active {
   display: block;
+}
+
+/* PDF Upload Section */
+.pdf-upload-section {
+  margin-bottom: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 12px;
+  background-color: #f8f9fa;
+}
+
+.pdf-upload-section label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.pdf-upload-section input[type="file"] {
+  width: 100%;
+  padding: 8px 0;
+  font-size: 14px;
+}
+
+.upload-info {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #666;
+}
+
+.upload-success {
+  color: #087f5b;
+  font-weight: 500;
+}
+
+.upload-error {
+  color: #e03131;
+  font-weight: 500;
+}
+
+.context-separator {
+  display: flex;
+  align-items: center;
+  margin: 15px 0;
+  text-align: center;
+}
+
+.context-separator::before, 
+.context-separator::after {
+  content: "";
+  flex: 1;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.context-separator span {
+  padding: 0 10px;
+  font-size: 12px;
+  color: #666;
+  background-color: #fff;
+}
+
+/* PDF List Styles */
+.pdf-list-container {
+  margin-top: 15px;
+}
+
+.pdf-list-container h4 {
+  font-size: 14px;
+  margin: 0 0 8px 0;
+  color: #4f46e5;
+  font-weight: 500;
+}
+
+.pdf-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+.pdf-list-empty {
+  padding: 10px;
+  color: #888;
+  font-style: italic;
+  font-size: 13px;
+  text-align: center;
+}
+
+.pdf-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  background-color: #fff;
+  transition: background-color 0.2s;
+}
+
+.pdf-item:last-child {
+  border-bottom: none;
+}
+
+.pdf-item:hover {
+  background-color: #f8f9fa;
+}
+
+.pdf-icon {
+  margin-right: 8px;
+  color: #e03131;
+  font-size: 16px;
+}
+
+.pdf-name {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pdf-size {
+  font-size: 11px;
+  color: #888;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.pdf-remove {
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  transition: color 0.2s;
+}
+
+.pdf-remove:hover {
+  color: #e03131;
+}
+
+/* Buttons layout */
+.context-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.clear-button {
+  padding: 8px 15px;
+  background-color: #f1f1f1;
+  color: #e03131;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.clear-button:hover {
+  background-color: #fff0f0;
+  border-color: #ffcccc;
+  color: #c92a2a;
 } 

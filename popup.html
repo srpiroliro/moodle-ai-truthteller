@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TruthTeller LLM Chat</title>
   <link rel="stylesheet" href="css/style.css">
+  <script src="js/lib/pdf.min.js"></script>
 </head>
 
 <body>
@@ -49,15 +50,37 @@
 
     <div class="context-panel" id="contextPanel">
       <h3>Custom Context</h3>
-      <p>Paste text here to use as context for answering your questions.</p>
+      <p>Upload PDF presentations or paste text to use as context for answering your questions.</p>
+      
+      <div class="pdf-upload-section">
+        <label for="pdfFileUpload">Upload PDF presentations:</label>
+        <input type="file" id="pdfFileUpload" accept="application/pdf" />
+        <div class="upload-info" id="uploadInfo"></div>
+      
+        <div class="pdf-list-container">
+          <h4>Uploaded PDFs:</h4>
+          <ul id="pdfList" class="pdf-list">
+            <!-- PDF files will be listed here dynamically -->
+          </ul>
+        </div>
+      </div>
+      
+      <div class="context-separator">
+        <span>OR</span>
+      </div>
+      
+      <textarea id="contextInput" placeholder="Paste your text here to provide context for your questions..."></textarea>
       <div class="context-toggle">
         <label for="useContextToggle">Use custom context:</label>
         <input type="checkbox" id="useContextToggle">
       </div>
-      <textarea id="contextInput" placeholder="Paste your text here to provide context for your questions..."></textarea>
-      <button class="save-button" id="saveContext">Save Context</button>
-      <p class="note"><strong>Note:</strong> When custom context is enabled, the model will use this text to help answer
-        your questions.</p>
+      <div class="context-buttons">
+        <button class="save-button" id="saveContext">Save Context</button>
+        <button class="clear-button" id="clearContext">Clear Context</button>
+        </div>
+        
+        <p class="note"><strong>Note:</strong> When custom context is enabled, the model will use the content from all uploaded
+          PDFs and/or the text you've entered to help answer your questions.</p>
     </div>
 
     <div class="settings-panel" id="settingsPanel">

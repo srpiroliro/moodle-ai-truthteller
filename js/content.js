@@ -16,7 +16,8 @@
     preferredModel: 'claude-3-7-sonnet', // Set Claude 3.7 Sonnet as the default model
     analyzedQuestions: new Map(), // Map to store analysis results by question ID
     customContext: '', // Custom context text
-    useCustomContext: false // Whether to use custom context when analyzing questions
+    useCustomContext: false, // Whether to use custom context when analyzing questions
+    uploadedPdfs: [] // Array to store uploaded PDF information
   };
 
   // Initialize when DOM is ready
@@ -66,7 +67,7 @@
   async function loadSettings() {
     return new Promise((resolve) => {
       chrome.storage.sync.get(
-        ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel', 'customContext', 'useCustomContext'],
+        ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel', 'customContext', 'useCustomContext', 'uploadedPdfs'],
         function(result) {
           state.apiKeys.openai = result.openaiApiKey || null;
           state.apiKeys.claude = result.claudeApiKey || null;
@@ -75,6 +76,11 @@
           // Load custom context settings
           state.customContext = result.customContext || '';
           state.useCustomContext = result.useCustomContext || false;
+          
+          // Load uploaded PDFs if available
+          if (result.uploadedPdfs && Array.isArray(result.uploadedPdfs)) {
+            state.uploadedPdfs = result.uploadedPdfs;
+          }
           
           // If a model is selected in storage, use it; otherwise use the default
           if (result.selectedModel) {
@@ -92,8 +98,9 @@
           
           console.log('TruthTeller: Settings loaded', {
             selectedModel: state.preferredModel,
-            customContext: state.customContext ? 'Set' : 'Not set',
-            useCustomContext: state.useCustomContext
+            customContext: state.customContext ? `Set (${state.customContext.length} chars)` : 'Not set',
+            useCustomContext: state.useCustomContext,
+            uploadedPdfs: state.uploadedPdfs.length > 0 ? `${state.uploadedPdfs.length} PDFs` : 'None'
           });
           
           resolve();
@@ -124,8 +131,19 @@
     if (state.useCustomContext && state.customContext.trim() !== '') {
       const contextIndicator = document.createElement('div');
       contextIndicator.className = 'truthteller-context-indicator';
-      contextIndicator.innerHTML = '📄 Using custom context';
-      contextIndicator.title = 'Questions will be analyzed using your custom context';
+      
+      if (state.uploadedPdfs.length > 0) {
+        const pdfNames = state.uploadedPdfs.length <= 3 
+          ? state.uploadedPdfs.map(pdf => pdf.name).join(', ')
+          : `${state.uploadedPdfs.length} PDFs`;
+          
+        contextIndicator.innerHTML = `📄 Using context from ${pdfNames}`;
+        contextIndicator.title = `Questions will be analyzed using context from ${state.uploadedPdfs.length} PDFs`;
+      } else {
+        contextIndicator.innerHTML = '📄 Using custom context';
+        contextIndicator.title = 'Questions will be analyzed using your custom context';
+      }
+      
       controlPanel.appendChild(contextIndicator);
     }
     
@@ -1005,7 +1023,11 @@
     if (state.useCustomContext && state.customContext.trim() !== '') {
       console.log('TruthTeller: Using custom context for question analysis', {
         contextLength: state.customContext.length,
-        usingCustomContext: state.useCustomContext
+        usingCustomContext: state.useCustomContext,
+        pdfCount: state.uploadedPdfs.length,
+        contextSource: state.uploadedPdfs.length > 0 
+          ? `${state.uploadedPdfs.length} PDFs: ${state.uploadedPdfs.map(pdf => pdf.name).join(', ')}` 
+          : 'Manual text input'
       });
     }
     
