@@ -14,6 +14,7 @@
       <h1>TruthTeller</h1>
       <div class="header-buttons">
         <button class="info-button" id="moodleInfoToggle" title="Moodle Quiz Helper Info">📝</button>
+        <button class="context-button" id="contextButton" title="Custom Context">📄</button>
         <button class="settings-button" id="settingsButton" title="Settings">⚙️</button>
       </div>
     </div>
@@ -46,6 +47,19 @@
         verify answers yourself before submitting.</p>
     </div>
 
+    <div class="context-panel" id="contextPanel">
+      <h3>Custom Context</h3>
+      <p>Paste text here to use as context for answering your questions.</p>
+      <div class="context-toggle">
+        <label for="useContextToggle">Use custom context:</label>
+        <input type="checkbox" id="useContextToggle">
+      </div>
+      <textarea id="contextInput" placeholder="Paste your text here to provide context for your questions..."></textarea>
+      <button class="save-button" id="saveContext">Save Context</button>
+      <p class="note"><strong>Note:</strong> When custom context is enabled, the model will use this text to help answer
+        your questions.</p>
+    </div>
+
     <div class="settings-panel" id="settingsPanel">
       <div class="api-key-input">
         <label for="openaiApiKey">OpenAI API Key:</label>
@@ -75,6 +89,7 @@
       <select id="modelSelect">
         <!-- Options will be populated dynamically from models.js -->
       </select>
+      <div class="context-indicator" id="contextIndicator" title="Custom context is active">📄</div>
     </div>
 
     <div class="chat-container" id="chatContainer">

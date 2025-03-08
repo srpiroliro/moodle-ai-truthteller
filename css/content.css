@@ -218,8 +218,8 @@
 }
 
 .truthteller-button:hover {
-  background-color: #f5f5f5;
-  color: #666;
+  color: #4f46e5;
+  border-color: #4f46e5;
 }
 
 .truthteller-loading {
@@ -256,10 +256,9 @@
 
 .truthteller-shortcut-hint {
   font-size: 9px;
-  color: #999;
+  color: #888;
   text-align: center;
-  margin-top: 2px;
-  opacity: 0.7;
+  margin-top: 3px;
 }
 
 .truthteller-subheading {
@@ -327,4 +326,29 @@
   margin-top: 2px;
   font-style: italic;
   opacity: 0.8;
+}
+
+/* Custom context indicator */
+.truthteller-context-indicator {
+  font-size: 11px;
+  padding: 5px 8px;
+  background-color: rgba(79, 70, 229, 0.2);
+  color: #4f46e5;
+  border: 1px solid rgba(79, 70, 229, 0.3);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.1);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  overflow: hidden;
+  cursor: help;
+}
+
+.truthteller-context-indicator:hover {
+  background-color: rgba(79, 70, 229, 0.25);
 } 

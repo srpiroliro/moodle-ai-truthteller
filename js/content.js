@@ -14,7 +14,9 @@
       grok: null
     },
     preferredModel: 'claude-3-7-sonnet', // Set Claude 3.7 Sonnet as the default model
-    analyzedQuestions: new Map() // Map to store analysis results by question ID
+    analyzedQuestions: new Map(), // Map to store analysis results by question ID
+    customContext: '', // Custom context text
+    useCustomContext: false // Whether to use custom context when analyzing questions
   };
 
   // Initialize when DOM is ready
@@ -64,11 +66,15 @@
   async function loadSettings() {
     return new Promise((resolve) => {
       chrome.storage.sync.get(
-        ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel'],
+        ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel', 'customContext', 'useCustomContext'],
         function(result) {
           state.apiKeys.openai = result.openaiApiKey || null;
           state.apiKeys.claude = result.claudeApiKey || null;
           state.apiKeys.grok = result.grokApiKey || null;
+          
+          // Load custom context settings
+          state.customContext = result.customContext || '';
+          state.useCustomContext = result.useCustomContext || false;
           
           // If a model is selected in storage, use it; otherwise use the default
           if (result.selectedModel) {
@@ -85,7 +91,9 @@
           }
           
           console.log('TruthTeller: Settings loaded', {
-            selectedModel: state.preferredModel
+            selectedModel: state.preferredModel,
+            customContext: state.customContext ? 'Set' : 'Not set',
+            useCustomContext: state.useCustomContext
           });
           
           resolve();
@@ -111,6 +119,15 @@
     const shortcutHint = document.createElement('div');
     shortcutHint.className = 'truthteller-shortcut-hint';
     shortcutHint.textContent = 'Press Alt+T to hide/show all results';
+    
+    // Add custom context indicator if enabled
+    if (state.useCustomContext && state.customContext.trim() !== '') {
+      const contextIndicator = document.createElement('div');
+      contextIndicator.className = 'truthteller-context-indicator';
+      contextIndicator.innerHTML = '📄 Using custom context';
+      contextIndicator.title = 'Questions will be analyzed using your custom context';
+      controlPanel.appendChild(contextIndicator);
+    }
     
     controlPanel.appendChild(clearButton);
     controlPanel.appendChild(shortcutHint);
@@ -984,9 +1001,28 @@
     // Construct prompt for the LLM
     const prompt = constructQuestionPrompt(questionData);
     
+    // Log if using custom context
+    if (state.useCustomContext && state.customContext.trim() !== '') {
+      console.log('TruthTeller: Using custom context for question analysis', {
+        contextLength: state.customContext.length,
+        usingCustomContext: state.useCustomContext
+      });
+    }
+    
+    // Log the full prompt for debugging
+    console.log('TruthTeller: Full prompt for LLM:', prompt);
+    
     try {
       // Call the appropriate API based on the model
       let apiCallFunction = getApiCallFunction(modelId);
+      
+      // Log the prompt metadata for debugging
+      console.log('TruthTeller: Sending prompt to LLM', {
+        questionType: questionData.type,
+        promptLength: prompt.length,
+        usingCustomContext: state.useCustomContext
+      });
+      
       let response = await apiCallFunction(prompt, modelId, apiKey);
       
       // Log the response for debugging (but don't store in state)
@@ -1048,9 +1084,15 @@ JUSTIFICATION: This is a mock response generated when the API call failed. The e
     // Check if the question is negated (asking for what is NOT correct)
     const isNegatedQuestion = checkIfNegatedQuestion(questionData.text);
     
+    // Add custom context if enabled
+    let customContextPrefix = '';
+    if (state.useCustomContext && state.customContext.trim() !== '') {
+      customContextPrefix = `IMPORTANT - CONTEXT INFORMATION (THIS MUST BE USED AS THE PRIMARY SOURCE OF INFORMATION):\n${state.customContext.trim()}\n\nYou MUST prioritize the above context when answering the question. Even if you think you know a different answer, use ONLY the information in the context. If a specific answer is mentioned in the context, use exactly that answer.\n\n`;
+    }
+    
     // For multiple choice questions
     if (questionData.type === 'single-choice' || questionData.type === 'multiple-choice' || questionData.type === 'true-false') {
-      prompt = `You are an AI that helps students analyze quiz questions. For the following question, identify the ${isNegatedQuestion ? 'INCORRECT' : 'most probable correct'} answer(s) with your confidence level. DO NOT explain the full reasoning process, just provide your answer analysis.
+      prompt = `${customContextPrefix}You are an AI that helps students analyze quiz questions. For the following question, identify the ${isNegatedQuestion ? 'INCORRECT' : 'most probable correct'} answer(s) with your confidence level. DO NOT explain the full reasoning process, just provide your answer analysis.
 
 Question: ${questionData.text}
 
@@ -1086,7 +1128,7 @@ Response:`;
     }
     // For essay questions
     else if (questionData.type === 'essay') {
-      prompt = `You are an AI that helps students understand how to approach essay questions. For the following essay question, provide a brief outline of how to answer it effectively. DO NOT write a full essay response.
+      prompt = `${customContextPrefix}You are an AI that helps students understand how to approach essay questions. For the following essay question, provide a brief outline of how to answer it effectively. DO NOT write a full essay response.
 
 Essay Question: ${questionData.text}
 
@@ -1117,7 +1159,7 @@ Response:`;
     }
     // For short answer questions
     else if (questionData.type === 'short-answer') {
-      prompt = `You are an AI that helps students analyze short answer questions. For the following question, provide a concise model answer. Keep it brief but complete.
+      prompt = `${customContextPrefix}You are an AI that helps students analyze short answer questions. For the following question, provide a concise model answer. Keep it brief but complete.
 
 Question: ${questionData.text}
 
@@ -1130,6 +1172,18 @@ Question: ${questionData.text}
       if (questionData.answerHints) {
         prompt += `Answer guidelines: ${questionData.answerHints}\n\n`;
       }
+      
+      // Check if this appears to be a one-word answer request
+      const isOneWordAnswer = questionData.text.toLowerCase().includes("one word") || 
+                             questionData.text.toLowerCase().includes("single word") ||
+                             (questionData.answerHints && questionData.answerHints.toLowerCase().includes("one word"));
+      
+      if (isOneWordAnswer && state.useCustomContext) {
+        prompt += `
+CRITICAL INSTRUCTION: This question requires a ONE WORD answer. If the answer is specified in the context, use EXACTLY that word. DO NOT improvise or use synonyms. The exact word from the context must be your answer.
+
+`;
+      }
 
       prompt += `
 Your task:
@@ -1137,9 +1191,10 @@ Your task:
 2. Provide a concise, accurate answer that directly addresses the question.
 3. Keep your answer brief but include all necessary information.
 4. Use clear, precise language.
+${isOneWordAnswer ? '5. Provide EXACTLY the answer specified in the context if available.' : ''}
 
 Format your response as follows:
-ANSWER: Your concise model answer
+ANSWER: ${isOneWordAnswer ? 'Just one word as specified in the context' : 'Your concise model answer'}
 CONFIDENCE: HIGH/MEDIUM/LOW (how confident you are in this answer)
 KEY TERMS: List any key terms or concepts that should be included in the answer
 
@@ -1147,7 +1202,7 @@ Response:`;
     }
     // For other question types or unknown types
     else {
-      prompt = `You are an AI that helps students analyze quiz questions. For the following question, provide guidance on how to approach it.
+      prompt = `${customContextPrefix}You are an AI that helps students analyze quiz questions. For the following question, provide guidance on how to approach it.
 
 Question: ${questionData.text}
 

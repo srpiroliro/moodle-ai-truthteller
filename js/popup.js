@@ -10,11 +10,23 @@ document.addEventListener('DOMContentLoaded', function() {
   const sendButton = document.getElementById('sendButton');
   const moodleInfoToggle = document.getElementById('moodleInfoToggle');
   const moodleInfoPanel = document.getElementById('moodleInfoPanel');
+  
+  // Custom context elements
+  const contextButton = document.getElementById('contextButton');
+  const contextPanel = document.getElementById('contextPanel');
+  const contextInput = document.getElementById('contextInput');
+  const useContextToggle = document.getElementById('useContextToggle');
+  const saveContextButton = document.getElementById('saveContext');
+  const contextIndicator = document.getElementById('contextIndicator');
 
   // API Key input fields
   const openaiApiKeyInput = document.getElementById('openaiApiKey');
   const claudeApiKeyInput = document.getElementById('claudeApiKey');
   const grokApiKeyInput = document.getElementById('grokApiKey');
+
+  // State variables
+  let customContext = '';
+  let useCustomContext = false;
 
   // Populate models dropdowns
   populateModelsDropdowns();
@@ -31,9 +43,12 @@ document.addEventListener('DOMContentLoaded', function() {
   // Toggle settings panel
   settingsButton.addEventListener('click', function() {
     settingsPanel.classList.toggle('visible');
-    // Hide Moodle info panel if open
+    // Hide other panels if open
     if (moodleInfoPanel && moodleInfoPanel.classList.contains('visible')) {
       moodleInfoPanel.classList.remove('visible');
+    }
+    if (contextPanel && contextPanel.classList.contains('visible')) {
+      contextPanel.classList.remove('visible');
     }
   });
 
@@ -41,9 +56,26 @@ document.addEventListener('DOMContentLoaded', function() {
   if (moodleInfoToggle) {
     moodleInfoToggle.addEventListener('click', function() {
       moodleInfoPanel.classList.toggle('visible');
-      // Hide settings panel if open
+      // Hide other panels if open
       if (settingsPanel.classList.contains('visible')) {
         settingsPanel.classList.remove('visible');
+      }
+      if (contextPanel && contextPanel.classList.contains('visible')) {
+        contextPanel.classList.remove('visible');
+      }
+    });
+  }
+
+  // Toggle custom context panel
+  if (contextButton) {
+    contextButton.addEventListener('click', function() {
+      contextPanel.classList.toggle('visible');
+      // Hide other panels if open
+      if (settingsPanel.classList.contains('visible')) {
+        settingsPanel.classList.remove('visible');
+      }
+      if (moodleInfoPanel && moodleInfoPanel.classList.contains('visible')) {
+        moodleInfoPanel.classList.remove('visible');
       }
     });
   }
@@ -54,6 +86,26 @@ document.addEventListener('DOMContentLoaded', function() {
     settingsPanel.classList.remove('visible');
     // Add a confirmation message
     addMessageToChat('bot', 'Settings saved successfully. You can now use the selected model.');
+  });
+
+  // Save context
+  saveContextButton.addEventListener('click', function() {
+    saveContext();
+    contextPanel.classList.remove('visible');
+    
+    if (useCustomContext && customContext.trim() !== '') {
+      addMessageToChat('bot', 'Custom context saved and activated. Your questions will now be answered based on this context.');
+    } else if (!useCustomContext) {
+      addMessageToChat('bot', 'Custom context is disabled. Your questions will be answered without using the provided context.');
+    } else {
+      addMessageToChat('bot', 'No custom context provided. Please add some text if you want to use custom context.');
+    }
+  });
+
+  // Toggle custom context usage
+  useContextToggle.addEventListener('change', function() {
+    useCustomContext = this.checked;
+    updateContextIndicator();
   });
 
   // Send message when Send button is clicked
@@ -110,11 +162,23 @@ document.addEventListener('DOMContentLoaded', function() {
   // Load saved settings from Chrome storage
   function loadSettings() {
     chrome.storage.sync.get(
-      ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel', 'defaultModel'], 
+      ['openaiApiKey', 'claudeApiKey', 'grokApiKey', 'selectedModel', 'defaultModel', 'customContext', 'useCustomContext'], 
       function(result) {
         if (result.openaiApiKey) openaiApiKeyInput.value = result.openaiApiKey;
         if (result.claudeApiKey) claudeApiKeyInput.value = result.claudeApiKey;
         if (result.grokApiKey) grokApiKeyInput.value = result.grokApiKey;
+        
+        // Load custom context settings
+        if (result.customContext) {
+          customContext = result.customContext;
+          contextInput.value = customContext;
+        }
+        
+        if (result.useCustomContext !== undefined) {
+          useCustomContext = result.useCustomContext;
+          useContextToggle.checked = useCustomContext;
+          updateContextIndicator();
+        }
         
         // Set the selected model from storage
         if (result.selectedModel) {
@@ -134,7 +198,9 @@ document.addEventListener('DOMContentLoaded', function() {
           claudeKey: result.claudeApiKey ? 'Set' : 'Not set',
           grokKey: result.grokApiKey ? 'Set' : 'Not set',
           selectedModel: modelSelect.value || 'Not set',
-          defaultModel: defaultModelSelect.value || 'Not set'
+          defaultModel: defaultModelSelect.value || 'Not set',
+          customContext: customContext ? 'Set' : 'Not set',
+          useCustomContext: useCustomContext
         });
       }
     );
@@ -164,6 +230,35 @@ document.addEventListener('DOMContentLoaded', function() {
     // Update the default model in models.js
     if (settings.defaultModel) {
       setDefaultModelId(settings.defaultModel);
+    }
+  }
+
+  // Save custom context to Chrome storage
+  function saveContext() {
+    customContext = contextInput.value;
+    useCustomContext = useContextToggle.checked;
+    
+    const contextSettings = {
+      customContext: customContext,
+      useCustomContext: useCustomContext
+    };
+    
+    chrome.storage.sync.set(contextSettings, function() {
+      console.log('TruthTeller: Context settings saved', {
+        customContext: customContext ? 'Set' : 'Not set',
+        useCustomContext: useCustomContext
+      });
+      
+      updateContextIndicator();
+    });
+  }
+
+  // Update the context indicator based on current state
+  function updateContextIndicator() {
+    if (useCustomContext && customContext.trim() !== '') {
+      contextIndicator.classList.add('active');
+    } else {
+      contextIndicator.classList.remove('active');
     }
   }
 
@@ -216,9 +311,28 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
       
+      // Prepare the full message with context if enabled
+      let fullMessage = message;
+      
+      if (useCustomContext && customContext.trim() !== '') {
+        fullMessage = `IMPORTANT - CONTEXT INFORMATION (THIS MUST BE USED AS THE PRIMARY SOURCE OF INFORMATION):\n${customContext.trim()}\n\nYou MUST prioritize the above context when answering the question. Even if you think you know a different answer, use ONLY the information in the context. If a specific answer is mentioned in the context, use exactly that answer.\n\nQuestion: ${message}\n\n`;
+        
+        // Log context usage
+        console.log('TruthTeller: Using custom context', {
+          contextLength: customContext.length,
+          useCustomContext: useCustomContext
+        });
+      }
+      
+      // Log the full prompt for debugging
+      console.log('TruthTeller: Full prompt for LLM:', fullMessage);
+      
       // Call the appropriate API using the centralized function
       const apiCallFunction = getApiCallFunction(selectedModelId);
-      const response = await apiCallFunction(message, selectedModelId, apiKey);
+      const response = await apiCallFunction(fullMessage, selectedModelId, apiKey);
+      
+      // Log the response
+      console.log('TruthTeller: LLM response:', response);
       
       // Remove typing indicator and add response to chat
       hideTypingIndicator();
@@ -254,35 +368,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Show typing indicator
   function showTypingIndicator() {
-    const indicator = document.createElement('div');
-    indicator.classList.add('typing-indicator');
-    indicator.id = 'typingIndicator';
+    const typingElement = document.createElement('div');
+    typingElement.id = 'typingIndicator';
+    typingElement.classList.add('typing-indicator');
     
+    // Add three dots for animation
     for (let i = 0; i < 3; i++) {
-      const dot = document.createElement('span');
-      indicator.appendChild(dot);
+      const dotElement = document.createElement('span');
+      typingElement.appendChild(dotElement);
     }
     
-    chatContainer.appendChild(indicator);
+    chatContainer.appendChild(typingElement);
     chatContainer.scrollTop = chatContainer.scrollHeight;
   }
 
   // Hide typing indicator
   function hideTypingIndicator() {
-    const indicator = document.getElementById('typingIndicator');
-    if (indicator) indicator.remove();
-  }
-
-  // Get API key based on provider
-  function getApiKeyForProvider(provider) {
-    switch (provider) {
-      case 'openai': return openaiApiKeyInput.value;
-      case 'claude': return claudeApiKeyInput.value;
-      case 'grok': return grokApiKeyInput.value;
-      default: return null;
+    const typingElement = document.getElementById('typingIndicator');
+    if (typingElement) {
+      typingElement.remove();
     }
   }
-  
+
+  // Get API key for provider
+  function getApiKeyForProvider(provider) {
+    switch(provider) {
+      case 'openai':
+        return openaiApiKeyInput.value;
+      case 'claude':
+        return claudeApiKeyInput.value;
+      case 'grok':
+        return grokApiKeyInput.value;
+      default:
+        return null;
+    }
+  }
+
   // Add a welcome message when the extension loads
   addMessageToChat('bot', 'Welcome to TruthTeller LLM Chat! Set your API keys in the settings (⚙️) to get started.');
 }); 
