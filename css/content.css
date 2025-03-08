@@ -319,4 +319,12 @@
   font-size: 10px;
   color: #555;
   font-style: italic;
+}
+
+.truthteller-negation-note {
+  font-size: 10px;
+  color: #f44336;
+  margin-top: 2px;
+  font-style: italic;
+  opacity: 0.8;
 } 

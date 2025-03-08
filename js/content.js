@@ -333,7 +333,7 @@
     if (questionData.type === 'single-choice' || questionData.type === 'multiple-choice' || questionData.type === 'true-false') {
       // Add the probable answer(s)
       const answerHeading = document.createElement('h4');
-      answerHeading.textContent = 'Most Probable Answer:';
+      answerHeading.textContent = analysis.isNegatedQuestion ? 'Incorrect Answer(s):' : 'Most Probable Answer:';
       resultContent.appendChild(answerHeading);
       
       // Create answer display
@@ -374,6 +374,14 @@
         });
         
         answerDisplay.textContent = options.join(', ');
+        
+        // For negated questions, add a note that these are the incorrect options
+        if (analysis.isNegatedQuestion) {
+          const noteElem = document.createElement('div');
+          noteElem.className = 'truthteller-negation-note';
+          noteElem.textContent = 'Note: This question asks for the INCORRECT option(s).';
+          resultContent.appendChild(noteElem);
+        }
       } else {
         answerDisplay.textContent = 'No clear answer identified';
       }
@@ -1037,9 +1045,12 @@ JUSTIFICATION: This is a mock response generated when the API call failed. The e
   function constructQuestionPrompt(questionData) {
     let prompt = '';
     
+    // Check if the question is negated (asking for what is NOT correct)
+    const isNegatedQuestion = checkIfNegatedQuestion(questionData.text);
+    
     // For multiple choice questions
     if (questionData.type === 'single-choice' || questionData.type === 'multiple-choice' || questionData.type === 'true-false') {
-      prompt = `You are an AI that helps students analyze quiz questions. For the following question, identify the most probable correct answer(s) with your confidence level. DO NOT explain the full reasoning process, just provide your answer analysis.
+      prompt = `You are an AI that helps students analyze quiz questions. For the following question, identify the ${isNegatedQuestion ? 'INCORRECT' : 'most probable correct'} answer(s) with your confidence level. DO NOT explain the full reasoning process, just provide your answer analysis.
 
 Question: ${questionData.text}
 
@@ -1058,15 +1069,16 @@ Question: ${questionData.text}
 
       prompt += `
 Question Type: ${questionData.type}
+${isNegatedQuestion ? 'IMPORTANT: This is a NEGATED question asking for what is NOT correct/true/accurate.' : ''}
 
 Your task:
 1. Analyze the question and options carefully.
-2. Identify which option(s) is/are most likely correct.
+2. ${isNegatedQuestion ? 'Identify which option(s) is/are INCORRECT/FALSE/NOT TRUE.' : 'Identify which option(s) is/are most likely correct.'}
 3. Assign a confidence level for each option: HIGH, MEDIUM, or LOW.
 4. Provide a VERY BRIEF justification (1-2 sentences max).
 
 Format your response as follows:
-ANSWER: Option # (for single choice) or Options #,# (for multiple choice)
+${isNegatedQuestion ? 'INCORRECT ANSWER' : 'ANSWER'}: Option # (for single choice) or Options #,# (for multiple choice)
 CONFIDENCE: HIGH/MEDIUM/LOW
 JUSTIFICATION: Brief justification
 
@@ -1166,6 +1178,49 @@ Response:`;
   }
 
   /**
+   * Checks if a question is negated (asking for what is NOT correct/true)
+   */
+  function checkIfNegatedQuestion(questionText) {
+    // Convert to lowercase for easier matching
+    const text = questionText.toLowerCase();
+    
+    // Check for common negation patterns
+    const negationPatterns = [
+      /\bnot\b.*\bcorrect\b/,
+      /\bincorrect\b/,
+      /\bnot\b.*\btrue\b/,
+      /\bfalse\b.*\bstatement\b/,
+      /\bnot\b.*\baccurate\b/,
+      /\binaccurate\b/,
+      /\bnot\b.*\bvalid\b/,
+      /\binvalid\b/,
+      /\bnot\b.*\bright\b/,
+      /\bwrong\b/,
+      /\bnot\b.*\bappropriate\b/,
+      /\binappropriate\b/,
+      /\bnot\b.*\bgood\b/,
+      /\bbad\b/,
+      /\bnot\b.*\bsuitable\b/,
+      /\bunsuitable\b/,
+      /\bnot\b.*\bproper\b/,
+      /\bimproper\b/,
+      /\bnot\b.*\btruthful\b/,
+      /\buntruthful\b/,
+      /which.*\bnot\b/
+    ];
+    
+    // Check each pattern
+    for (const pattern of negationPatterns) {
+      if (pattern.test(text)) {
+        console.log('TruthTeller: Detected negated question');
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
    * Parse the LLM response to extract answer analysis
    */
   function parseAnalysisResponse(response, questionData) {
@@ -1179,14 +1234,19 @@ Response:`;
       structure: '',
       conceptsToInclude: [],
       approach: '',
-      modelAnswer: ''
+      modelAnswer: '',
+      isNegatedQuestion: checkIfNegatedQuestion(questionData.text)
     };
     
     try {
       // For multiple choice questions
       if (questionData.type === 'single-choice' || questionData.type === 'multiple-choice' || questionData.type === 'true-false') {
         // Extract answer, confidence, and justification using regex
-        const answerMatch = response.match(/ANSWER:\s*(.*)/i);
+        // For negated questions, look for "INCORRECT ANSWER" instead of "ANSWER"
+        const answerMatch = analysis.isNegatedQuestion 
+          ? response.match(/INCORRECT ANSWER:\s*(.*)/i) || response.match(/ANSWER:\s*(.*)/i)
+          : response.match(/ANSWER:\s*(.*)/i);
+          
         const confidenceMatch = response.match(/CONFIDENCE:\s*(HIGH|MEDIUM|LOW)/i);
         const justificationMatch = response.match(/JUSTIFICATION:\s*(.*)/i);
         
